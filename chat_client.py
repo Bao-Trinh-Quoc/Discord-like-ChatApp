@@ -648,71 +648,93 @@ class ChatClient:
             print(f"Failed to get online users: {response.get('message')}")
             return []
 
-    # Comment out stream-related methods
-    '''
-    def start_stream(self, channel):
-        """Start streaming in a channel"""
-        if not self.token or not channel:
-            return False
-            
+    def start_stream(self, channel_name):
+        """Start a stream in a channel"""
         request = {
             "type": "STREAM_START",
             "token": self.token,
-            "channel": channel
-        }
-        
-        response = self._send_to_central_server(request)
-        return response.get("success", False)
-
-    def stop_stream(self, channel):
-        """Stop streaming in a channel"""
-        if not self.token or not channel:
-            return False
-            
-        request = {
-            "type": "STREAM_END",
-            "token": self.token,
-            "channel": channel
-        }
-        
-        response = self._send_to_central_server(request)
-        return response.get("success", False)
-
-    def join_stream(self, channel):
-        """Join a stream in a channel"""
-        if not self.token or not channel:
-            return None
-            
-        request = {
-            "type": "STREAM_JOIN",
-            "token": self.token,
-            "channel": channel
+            "channel": channel_name
         }
         
         response = self._send_to_central_server(request)
         if response.get("success"):
-            return {
-                "streamer": response["streamer"],
-                "peer_info": response["peer_info"]
-            }
-        return None
+            print(f"Started stream in channel {channel_name}")
+            return True
+        else:
+            print(f"Failed to start stream: {response.get('message')}")
+            return False
     
+    def end_stream(self, channel_name):
+        """End a stream in a channel"""
+        request = {
+            "type": "STREAM_END",
+            "token": self.token,
+            "channel": channel_name
+        }
+        
+        response = self._send_to_central_server(request)
+        if response.get("success"):
+            print(f"Ended stream in channel {channel_name}")
+            return True
+        else:
+            print(f"Failed to end stream: {response.get('message')}")
+            return False
+    
+    def join_stream(self, channel_name):
+        """Join a stream in a channel"""
+        request = {
+            "type": "STREAM_JOIN",
+            "token": self.token,
+            "channel": channel_name
+        }
+        
+        response = self._send_to_central_server(request)
+        if response.get("success"):
+            print(f"Joined stream in channel {channel_name}")
+            return response.get("stream_info")
+        else:
+            print(f"Failed to join stream: {response.get('message')}")
+            return None
+    
+    def leave_stream(self, channel_name):
+        """Leave a stream in a channel"""
+        request = {
+            "type": "STREAM_LEAVE",
+            "token": self.token,
+            "channel": channel_name
+        }
+        
+        response = self._send_to_central_server(request)
+        if response.get("success"):
+            print(f"Left stream in channel {channel_name}")
+            return True
+        else:
+            print(f"Failed to leave stream: {response.get('message')}")
+            return False
 
-    async def handle_viewer_connection(self, viewer_username):
-        """Handle a new viewer connecting to our stream"""
-        if not self.peer:
+    def get_stream_info(self, channel_name):
+        """Get information about an active stream in a channel"""
+        request = {
+            "type": "GET_STREAM_INFO",
+            "token": self.token,
+            "channel": channel_name
+        }
+        
+        response = self._send_to_central_server(request)
+        if response.get("success"):
+            return response.get("stream_info")
+        return None
+
+    def get_channel(self, channel_name):
+        """Get channel information from the database"""
+        # Get channel info from database
+        channel = db.get_channel(channel_name)
+        if not channel:
+            print(f"Channel '{channel_name}' not found")
             return None
             
-        return await self.peer.handle_viewer_connection(viewer_username)
+        return channel
 
-    async def handle_viewer_answer(self, viewer_username, answer):
-        """Handle a viewer's answer to our stream offer"""
-        if not self.peer:
-            return False
-            
-        return await self.peer.handle_viewer_answer(viewer_username, answer)
-    
-    '''
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
                 prog='Chat Client',

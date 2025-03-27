@@ -25,13 +25,11 @@ MSG_GET_HISTORY = "GET_HISTORY"
 MSG_SEND_MESSAGE = "SEND_MESSAGE"
 MSG_STATUS = "STATUS"  # Added status message type
 MSG_GET_ONLINE_USERS = "GET_ONLINE_USERS"  # Added new message type
-# Comment out stream message types
-'''
-MSG_STREAM_START = "STREAM_START"  # Added new message type
-MSG_STREAM_END = "STREAM_END"  # Added new message type
-MSG_STREAM_JOIN = "STREAM_JOIN"  # Added new message type
-MSG_STREAM_LEAVE = "STREAM_LEAVE"  # Added new message type
-'''
+MSG_STREAM_START = "STREAM_START"
+MSG_STREAM_END = "STREAM_END"
+MSG_STREAM_JOIN = "STREAM_JOIN"
+MSG_STREAM_LEAVE = "STREAM_LEAVE"
+MSG_GET_STREAM_INFO = "GET_STREAM_INFO"
 
 class CentralServer:
     def __init__(self, host, port):
@@ -40,13 +38,11 @@ class CentralServer:
         self.running = False
         self.server_socket = None
         self.clients = {}  # Maps client address to client data
+        self.active_streams = {}  # channel -> {streamer, viewers, start_time}
         
         # Cleanup thread for expired sessions and inactive peers
         self.cleanup_thread = threading.Thread(target=self._cleanup_routine)
         self.cleanup_thread.daemon = True
-        
-        # Comment out stream tracking
-        # self.active_streams = {}  # channel -> {streamer, viewers}
     
     def start(self):
         """Start the central server"""
@@ -147,6 +143,16 @@ class CentralServer:
                 response = self._handle_status(request, client_info)
             elif message_type == MSG_GET_ONLINE_USERS:
                 response = self._handle_get_online_users(request, client_info)
+            elif message_type == MSG_STREAM_START:
+                response = self._handle_stream_start(request, client_info)
+            elif message_type == MSG_STREAM_END:
+                response = self._handle_stream_end(request, client_info)
+            elif message_type == MSG_STREAM_JOIN:
+                response = self._handle_stream_join(request, client_info)
+            elif message_type == MSG_STREAM_LEAVE:
+                response = self._handle_stream_leave(request, client_info)
+            elif message_type == MSG_GET_STREAM_INFO:
+                response = self._handle_get_stream_info(request, client_info)
 
             # Send response
             response_data = json.dumps(response).encode('utf-8')
@@ -578,6 +584,166 @@ class CentralServer:
             "success": True,
             "type": MSG_SUCCESS,
             "users": users_list
+        }
+    
+    def _handle_stream_start(self, request, client_info):
+        """Handle request to start a stream"""
+        token = request.get("token")
+        channel_name = request.get("channel")
+        
+        # Validate session
+        valid, msg, username = auth.validate_session(token)
+        if not valid:
+            return {"success": False, "type": MSG_ERROR, "message": msg}
+        
+        # Check if visitor (who can't stream)
+        if username.startswith("visitor:"):
+            return {"success": False, "type": MSG_ERROR, "message": "Visitors cannot start streams"}
+        
+        # Check if channel exists
+        channel = db.get_channel(channel_name)
+        if not channel:
+            return {"success": False, "type": MSG_ERROR, "message": f"Channel {channel_name} not found"}
+        
+        # Check if this user owns the channel
+        if channel["owner"] != username:
+            return {"success": False, "type": MSG_ERROR, "message": "Only channel owner can start streams"}
+        
+        # Check if stream already exists
+        if channel_name in self.active_streams:
+            return {"success": False, "type": MSG_ERROR, "message": "Stream already active in this channel"}
+        
+        # Start new stream
+        self.active_streams[channel_name] = {
+            "streamer": username,
+            "viewers": set(),
+            "start_time": datetime.now().isoformat()
+        }
+        
+        system_logger.log_channel_event(channel_name, "stream_started", username)
+        
+        return {
+            "success": True,
+            "type": MSG_SUCCESS,
+            "message": "Stream started successfully",
+            "stream_info": {
+                "streamer": username,
+                "start_time": self.active_streams[channel_name]["start_time"]
+            }
+        }
+    
+    def _handle_stream_end(self, request, client_info):
+        """Handle request to end a stream"""
+        token = request.get("token")
+        channel_name = request.get("channel")
+        
+        # Validate session
+        valid, msg, username = auth.validate_session(token)
+        if not valid:
+            return {"success": False, "type": MSG_ERROR, "message": msg}
+        
+        # Check if stream exists
+        if channel_name not in self.active_streams:
+            return {"success": False, "type": MSG_ERROR, "message": "No active stream in this channel"}
+        
+        # Check if this user is the streamer
+        if self.active_streams[channel_name]["streamer"] != username:
+            return {"success": False, "type": MSG_ERROR, "message": "Only the streamer can end the stream"}
+        
+        # End stream
+        stream_info = self.active_streams[channel_name]
+        del self.active_streams[channel_name]
+        
+        system_logger.log_channel_event(channel_name, "stream_ended", username)
+        
+        return {
+            "success": True,
+            "type": MSG_SUCCESS,
+            "message": "Stream ended successfully",
+            "stream_info": {
+                "duration": (datetime.now() - datetime.fromisoformat(stream_info["start_time"])).total_seconds()
+            }
+        }
+    
+    def _handle_stream_join(self, request, client_info):
+        """Handle request to join a stream"""
+        token = request.get("token")
+        channel_name = request.get("channel")
+        
+        # Validate session
+        valid, msg, username = auth.validate_session(token)
+        if not valid:
+            return {"success": False, "type": MSG_ERROR, "message": msg}
+        
+        # Check if stream exists
+        if channel_name not in self.active_streams:
+            return {"success": False, "type": MSG_ERROR, "message": "No active stream in this channel"}
+        
+        # Add viewer to stream
+        self.active_streams[channel_name]["viewers"].add(username)
+        
+        system_logger.log_channel_event(channel_name, f"stream_joined by {username}", username)
+        
+        return {
+            "success": True,
+            "type": MSG_SUCCESS,
+            "message": "Joined stream successfully",
+            "stream_info": {
+                "streamer": self.active_streams[channel_name]["streamer"],
+                "start_time": self.active_streams[channel_name]["start_time"]
+            }
+        }
+    
+    def _handle_stream_leave(self, request, client_info):
+        """Handle request to leave a stream"""
+        token = request.get("token")
+        channel_name = request.get("channel")
+        
+        # Validate session
+        valid, msg, username = auth.validate_session(token)
+        if not valid:
+            return {"success": False, "type": MSG_ERROR, "message": msg}
+        
+        # Check if stream exists
+        if channel_name not in self.active_streams:
+            return {"success": False, "type": MSG_ERROR, "message": "No active stream in this channel"}
+        
+        # Remove viewer from stream
+        if username in self.active_streams[channel_name]["viewers"]:
+            self.active_streams[channel_name]["viewers"].remove(username)
+        
+        system_logger.log_channel_event(channel_name, f"stream_left by {username}", username)
+        
+        return {
+            "success": True,
+            "type": MSG_SUCCESS,
+            "message": "Left stream successfully"
+        }
+    
+    def _handle_get_stream_info(self, request, client_info):
+        """Handle request to get stream information"""
+        token = request.get("token")
+        channel_name = request.get("channel")
+        
+        # Validate session
+        valid, msg, username = auth.validate_session(token)
+        if not valid:
+            return {"success": False, "type": MSG_ERROR, "message": msg}
+        
+        # Check if stream exists
+        if channel_name not in self.active_streams:
+            return {"success": False, "type": MSG_ERROR, "message": "No active stream in this channel"}
+        
+        # Return stream info
+        stream_info = self.active_streams[channel_name]
+        return {
+            "success": True,
+            "type": MSG_SUCCESS,
+            "stream_info": {
+                "streamer": stream_info["streamer"],
+                "viewer_count": len(stream_info["viewers"]),
+                "start_time": stream_info["start_time"]
+            }
         }
     
     def _cleanup_routine(self):

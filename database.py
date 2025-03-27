@@ -147,9 +147,18 @@ class Database:
         return True
     
     def get_channel(self, channel_name):
-        """Get channel details"""
+        """Get channel information"""
         channels = self._load_json(self.channels_file)
-        return channels.get(channel_name)
+        if channel_name in channels:
+            channel = channels[channel_name]
+            return {
+                "name": channel_name,
+                "owner": channel["owner"],
+                "description": channel.get("description", ""),
+                "created_at": channel["created_at"],
+                "members": channel.get("members", [])
+            }
+        return None
     
     def list_channels(self):
         """List all available channels"""
