@@ -1,0 +1,40 @@
+{
+  "baosd": {
+    "owner": "bao",
+    "description": "123",
+    "created_at": "2025-03-21T17:15:57.333400",
+    "members": [
+      "bao",
+      "aob",
+      "visitor:guest",
+      "visitor:g",
+      "hacker"
+    ],
+    "last_message_id": 44
+  },
+  "newbao": {
+    "owner": "bao",
+    "description": "123",
+    "created_at": "2025-03-21T17:19:10.641088",
+    "members": [
+      "bao",
+      "visitor:guest",
+      "visitor:g",
+      "aob",
+      "hacker"
+    ],
+    "last_message_id": 1
+  },
+  "aob cool chat": {
+    "owner": "aob",
+    "description": "cool only please",
+    "created_at": "2025-03-26T22:10:02.544609",
+    "members": [
+      "aob",
+      "bao",
+      "visitor:ds",
+      "hacker"
+    ],
+    "last_message_id": 2
+  }
+}

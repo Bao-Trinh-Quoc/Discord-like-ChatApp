@@ -1,0 +1,108 @@
+{
+  "bao:192.168.2.17:8001": {
+    "username": "bao",
+    "ip": "192.168.2.17",
+    "port": 8001,
+    "type": "normal",
+    "last_seen": "2025-03-21T16:34:28.853267",
+    "hosting_channels": [
+      "myNewCreatedChannel"
+    ]
+  },
+  "aob:192.168.2.17:8002": {
+    "username": "aob",
+    "ip": "192.168.2.17",
+    "port": 8002,
+    "type": "normal",
+    "last_seen": "2025-03-21T16:34:29.993082",
+    "hosting_channels": []
+  },
+  "bao:192.168.2.25:8001": {
+    "username": "bao",
+    "ip": "192.168.2.25",
+    "port": 8001,
+    "type": "normal",
+    "last_seen": "2025-03-27T23:10:11.641789",
+    "hosting_channels": []
+  },
+  "23:192.168.2.25:8001": {
+    "username": "23",
+    "ip": "192.168.2.25",
+    "port": 8001,
+    "type": "visitor",
+    "last_seen": "2025-03-21T17:32:34.481400",
+    "hosting_channels": []
+  },
+  "aob:192.168.2.25:8002": {
+    "username": "aob",
+    "ip": "192.168.2.25",
+    "port": 8002,
+    "type": "normal",
+    "last_seen": "2025-03-27T22:15:20.545512",
+    "hosting_channels": []
+  },
+  "guest:192.168.2.25:8003": {
+    "username": "guest",
+    "ip": "192.168.2.25",
+    "port": 8003,
+    "type": "visitor",
+    "last_seen": "2025-03-21T17:46:22.626767",
+    "hosting_channels": []
+  },
+  "bao:192.168.2.25:8002": {
+    "username": "bao",
+    "ip": "192.168.2.25",
+    "port": 8002,
+    "type": "normal",
+    "last_seen": "2025-03-26T21:41:53.955647",
+    "hosting_channels": []
+  },
+  "bao:192.168.2.25:8003": {
+    "username": "bao",
+    "ip": "192.168.2.25",
+    "port": 8003,
+    "type": "normal",
+    "last_seen": "2025-03-26T21:53:55.196745",
+    "hosting_channels": []
+  },
+  "g:192.168.2.25:8001": {
+    "username": "g",
+    "ip": "192.168.2.25",
+    "port": 8001,
+    "type": "visitor",
+    "last_seen": "2025-03-21T22:27:15.437972",
+    "hosting_channels": []
+  },
+  "g:192.168.2.25:8002": {
+    "username": "g",
+    "ip": "192.168.2.25",
+    "port": 8002,
+    "type": "visitor",
+    "last_seen": "2025-03-21T22:59:27.971038",
+    "hosting_channels": []
+  },
+  "aob:192.168.2.25:8001": {
+    "username": "aob",
+    "ip": "192.168.2.25",
+    "port": 8001,
+    "type": "normal",
+    "last_seen": "2025-03-26T21:41:43.548352",
+    "hosting_channels": []
+  },
+  "ds:192.168.2.25:8003": {
+    "username": "ds",
+    "ip": "192.168.2.25",
+    "port": 8003,
+    "type": "visitor",
+    "last_seen": "2025-03-26T22:13:43.208211",
+    "hosting_channels": []
+  },
+  "hacker:192.168.2.25:8003": {
+    "username": "hacker",
+    "ip": "192.168.2.25",
+    "port": 8003,
+    "type": "normal",
+    "last_seen": "2025-03-26T23:07:47.880747",
+    "hosting_channels": []
+  }
+}
