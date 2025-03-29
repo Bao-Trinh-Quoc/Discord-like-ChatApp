@@ -436,14 +436,14 @@ class ChatGUI:
         
         # Initialize chat display with proper packing
         self.chat_display = scrolledtext.ScrolledText(
-            chat_frame,
-            wrap=tk.WORD,
-            bg=self.colors['light_bg'],
-            fg=self.colors['text'],
-            font=('Helvetica', 10),
-            state=tk.DISABLED,
+                chat_frame,
+                wrap=tk.WORD,
+                bg=self.colors['light_bg'],
+                fg=self.colors['text'],
+                font=('Helvetica', 10),
+                state=tk.DISABLED,
             height=20
-        )
+            )
         self.chat_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
         # Message input frame
@@ -460,15 +460,15 @@ class ChatGUI:
                                       text="🎥 Start Stream",
                                       command=self._show_stream_window,
                                       bg=self.colors['accent'],
-                                      fg=self.colors['text'],
+            fg=self.colors['text'],
                                       font=('Helvetica', 10),
-                                      relief=tk.FLAT)
+            relief=tk.FLAT)
             self.stream_btn.pack(side=tk.LEFT, padx=(0, 5))
         
         # Watch Stream button
         self.watch_stream_btn = tk.Button(message_frame,
                                         text="👁️ Watch Stream",
-                                        command=self._check_and_join_stream,
+                                        command=lambda: self.loop.create_task(self._check_and_join_stream()),
                                         bg=self.colors['accent'],
                                         fg=self.colors['text'],
                                         font=('Helvetica', 10),
@@ -477,12 +477,12 @@ class ChatGUI:
         
         # Send button
         send_btn = tk.Button(message_frame,
-                           text="Send",
-                           command=self._send_message,
-                           bg=self.colors['accent'],
-                           fg=self.colors['text'],
-                           font=('Helvetica', 10),
-                           relief=tk.FLAT)
+                            text="Send",
+                            command=self._send_message,
+                            bg=self.colors['accent'],
+                            fg=self.colors['text'],
+                            font=('Helvetica', 10),
+                            relief=tk.FLAT)
         send_btn.pack(side=tk.RIGHT)
         
         # Bind Enter key to send message
@@ -611,11 +611,11 @@ class ChatGUI:
         selection = self.channel_listbox.curselection()
         if not selection:
             return
-            
+
         # Extract channel name from the selection (remove the owner part)
         channel_text = self.channel_listbox.get(selection[0])
         channel_name = channel_text.split(" (")[0]  # Get just the channel name before the owner part
-        
+
         # Join channel
         if self.chat_client.join_channel(channel_name):
             # Get message history
@@ -646,16 +646,17 @@ class ChatGUI:
             if stream_info:
                 if messagebox.askyesno("Active Stream", 
                     f"There is an active stream in this channel by {stream_info['streamer']}.\nWould you like to join?"):
-                    self._show_viewer_window(channel_name, stream_info)
+                    # Use create_task to handle the async call
+                    self.loop.create_task(self._show_viewer_window(channel_name, stream_info))
         else:
             messagebox.showerror("Error", f"Failed to join channel: {channel_name}")
     
-    def _show_viewer_window(self, channel_name, stream_info):
+    async def _show_viewer_window(self, channel_name, stream_info):
         """Show the viewer window for watching a stream"""
         # Create viewer window
         viewer_window = tk.Toplevel(self.root)
         viewer_window.title(f"Stream Viewer - {channel_name}")
-        viewer_window.geometry("800x600")
+        viewer_window.geometry("1200x700")  # Increased width to accommodate chat
         
         # Configure window style
         viewer_window.configure(bg=self.colors['light_bg'])
@@ -664,22 +665,74 @@ class ChatGUI:
         main_frame = ttk.Frame(viewer_window, style='Main.TFrame')
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        # Video frame
+        # Create left frame for video
         video_frame = ttk.Frame(main_frame, style='Main.TFrame')
-        video_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        video_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
         
         # Video display with specific size
         video_display = tk.Label(video_frame,
                                text="Initializing camera...",
-                               bg=self.colors['dark_bg'],
-                               fg=self.colors['text'],
-                               font=('Helvetica', 14),
-                               width=640,  # Set specific width
-                               height=480)  # Set specific height
+                               bg="black",  # Set to black for better visibility
+                               fg="white",
+                               font=('Helvetica', 14))
         video_display.pack(fill=tk.BOTH, expand=True)
+
+        # Configure video frame with fixed size
+        video_frame.configure(width=640, height=480)
+        video_frame.pack_propagate(False)  # Prevent frame from shrinking
+
+        # Create right frame for chat
+        chat_frame = ttk.Frame(main_frame, style='Main.TFrame')
+        chat_frame.pack(side=tk.RIGHT, fill=tk.BOTH, padx=(5, 0))
         
+        # Configure chat frame with fixed width
+        chat_frame.configure(width=400)
+        chat_frame.pack_propagate(False)  # Prevent frame from shrinking
+        
+        # Chat header
+        chat_header = ttk.Label(chat_frame,
+                              text="Stream Chat",
+                              style='Discord.TLabel',
+                              font=('Helvetica', 14, 'bold'))
+        chat_header.pack(pady=(0, 5))
+        
+        # Chat display
+        chat_display = scrolledtext.ScrolledText(
+            chat_frame,
+            wrap=tk.WORD,
+            bg=self.colors['light_bg'],
+            fg=self.colors['text'],
+            font=('Helvetica', 10),
+            state=tk.DISABLED,
+            height=20
+        )
+        chat_display.pack(fill=tk.BOTH, expand=True, pady=(0, 5))
+        
+        # Chat input frame
+        chat_input_frame = ttk.Frame(chat_frame, style='Main.TFrame')
+        chat_input_frame.pack(fill=tk.X, pady=(5, 0))
+        
+        # Chat input field
+        chat_entry = ttk.Entry(chat_input_frame, style='Discord.TEntry')
+        chat_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+        
+        # Send button
+        send_btn = tk.Button(chat_input_frame,
+                           text="Send",
+                           command=lambda: self.loop.create_task(send_stream_message()),
+                           bg=self.colors['accent'],
+                           fg=self.colors['text'],
+                           font=('Helvetica', 10),
+                           relief=tk.FLAT)
+        send_btn.pack(side=tk.RIGHT)
+
+        # WebRTC connection variables
+        pc = None
+        video_track = None
+        running = True
+
         # Controls frame
-        controls_frame = ttk.Frame(main_frame, style='Main.TFrame')
+        controls_frame = ttk.Frame(video_frame, style='Main.TFrame')
         controls_frame.pack(fill=tk.X, padx=5, pady=5)
         
         # Status label
@@ -691,128 +744,351 @@ class ChatGUI:
         # Close button
         close_btn = tk.Button(controls_frame,
                             text="Close",
-                            command=viewer_window.destroy,
+                            command=lambda: self.loop.create_task(handle_close()),
                             bg=self.colors['light_bg'],
                             fg=self.colors['text'],
                             font=('Helvetica', 12),
                             relief=tk.FLAT)
         close_btn.pack(side=tk.RIGHT, padx=5)
+
+        async def send_stream_message():
+            """Send a chat message in the stream"""
+            message = chat_entry.get().strip()
+            if not message:
+                return
+                
+            # Clear input field
+            chat_entry.delete(0, tk.END)
+            
+            # Create message data
+            msg_data = {
+                "type": "STREAM_MESSAGE",
+                "token": self.chat_client.token,
+                "channel": channel_name,
+                "content": message,
+                "username": self.chat_client.username,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            # Send to central server
+            response = self.chat_client._send_to_central_server(msg_data)
+            
+            if response.get("success"):
+                # Message will be displayed when received through the update mechanism
+                pass
+            else:
+                # Show error in chat
+                display_chat_message("System", "Failed to send message", error=True)
+
+        def display_chat_message(username, content, error=False):
+            """Display a chat message in the chat display"""
+            chat_display.config(state=tk.NORMAL)
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            
+            if error:
+                # Show error messages in red
+                chat_display.insert(tk.END, f"[{timestamp}] ", "timestamp")
+                chat_display.insert(tk.END, f"{content}\n", "error")
+            else:
+                chat_display.insert(tk.END, f"[{timestamp}] {username}: {content}\n")
+            
+            chat_display.see(tk.END)
+            chat_display.config(state=tk.DISABLED)
         
-        # WebRTC connection
-        pc = None
-        video_track = None
+        # Configure chat display tags
+        chat_display.tag_configure("error", foreground="red")
+        chat_display.tag_configure("timestamp", foreground=self.colors['secondary_text'])
         
+        # Bind Enter key to send message
+        chat_entry.bind('<Return>', lambda e: self.loop.create_task(send_stream_message()))
+        
+        # Start message update loop
+        async def update_stream_messages():
+            """Periodically check for new stream messages"""
+            last_message_id = 0
+            while running:
+                try:
+                    # Get new messages from server
+                    request = {
+                        "type": "GET_STREAM_MESSAGES",
+                        "token": self.chat_client.token,
+                        "channel": channel_name,
+                        "since_id": last_message_id
+                    }
+                    
+                    response = self.chat_client._send_to_central_server(request)
+                    if response.get("success"):
+                        messages = response.get("messages", [])
+                        for msg in messages:
+                            display_chat_message(msg["username"], msg["content"])
+                            last_message_id = max(last_message_id, msg.get("id", 0))
+                    
+                    await asyncio.sleep(1)  # Check every second
+                    
+                except Exception as e:
+                    print(f"Error updating stream messages: {e}")
+                    await asyncio.sleep(1)
+
         async def display_video():
             """Display video frames from the track"""
+            nonlocal video_track, running
+            frame_count = 0
+            last_frame_time = time.time()
+            consecutive_errors = 0
+            last_frame = None  # Keep last frame as backup
+            
+            print(f"Starting display loop with track: kind={video_track.kind}, id={video_track.id}")
+            print(f"Track readyState: {video_track.readyState}")
+            
             try:
-                while True:
-                    frame = await video_track.recv()
-                    if frame is not None:
-                        # Convert frame to PhotoImage
-                        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                        photo = ImageTk.PhotoImage(image=Image.fromarray(frame_rgb))
+                while running and video_track:
+                    try:
+                        # First try with short timeout
+                        try:
+                            frame = await asyncio.wait_for(video_track.recv(), timeout=1.0)
+                        except asyncio.TimeoutError:
+                            print(f"Short timeout waiting for frame, track state: {video_track.readyState}")
+                            # Try again with longer timeout
+                            try:
+                                frame = await asyncio.wait_for(video_track.recv(), timeout=5.0)
+                            except asyncio.TimeoutError:
+                                print(f"Long timeout waiting for frame, track state: {video_track.readyState}")
+                                if consecutive_errors > 5:
+                                    print("Too many consecutive timeouts, resetting connection")
+                                    break
+                                consecutive_errors += 1
+                                continue
                         
-                        # Update video display
-                        video_display.config(image=photo)
-                        video_display.image = photo  # Keep a reference
+                        if frame is None or frame.width == 0 or frame.height == 0:
+                            print("Received empty frame")
+                            if last_frame is not None:
+                                frame = last_frame
+                            else:
+                                continue
+                        
+                        # Convert frame to array
+                        frame_time = time.time()
+                        frame_delay = frame_time - last_frame_time
+                        print(f"Frame #{frame_count} received after {frame_delay:.3f}s, PTS={frame.pts}, time_base={frame.time_base}")
+                        
+                        # Get frame data
+                        frame_data = frame.to_ndarray(format="rgb24")
+                        if frame_data is None or frame_data.size == 0:
+                            print("Failed to convert frame to array")
+                            continue
+                            
+                        print(f"Frame shape: {frame_data.shape}, dtype: {frame_data.dtype}")
+                        
+                        # Convert to PIL Image
+                        image = Image.fromarray(frame_data)
+                        print(f"PIL Image size: {image.size}, mode: {image.mode}")
+                        
+                        # Resize if needed
+                        if image.size != (640, 480):
+                            image = image.resize((640, 480), Image.LANCZOS)
+                        
+                        try:
+                            # Convert to PhotoImage
+                            photo = ImageTk.PhotoImage(image=image)
+                            
+                            # Update display
+                            video_display.configure(image=photo)
+                            video_display.image = photo  # Keep reference
+                            
+                            frame_count += 1
+                            last_frame_time = frame_time
+                            last_frame = frame  # Store successful frame
+                            consecutive_errors = 0  # Reset error count
+                            
+                        except Exception as e:
+                            print(f"Error creating PhotoImage: {e}")
+                            consecutive_errors += 1
+                            
+                        # Control frame rate
+                        await asyncio.sleep(1/30)  # 30 FPS
+                        
+                    except Exception as e:
+                        print(f"Error in display loop: {e}")
+                        consecutive_errors += 1
+                        if consecutive_errors > 5:
+                            print("Too many consecutive errors, resetting connection")
+                            break
+                            
             except Exception as e:
-                print(f"Error in display_video: {e}")
-                status_label.config(text="Stream ended")
-        
+                print(f"Fatal error in display loop: {e}")
+            finally:
+                print("Display loop ended")
+                if running:
+                    status_label.config(text="Stream ended")
+
+        async def handle_close():
+            """Handle window close"""
+            nonlocal running
+            running = False
+            
+            if video_track:
+                video_track.stop()
+            
+            if pc:
+                await pc.close()
+                
+            viewer_window.destroy()
+
         async def connect_to_stream():
-            nonlocal pc, video_track
+            nonlocal pc, video_track, running
             
             try:
                 # Get streamer's IP address from stream info
-                streamer_ip = stream_info.get('streamer_ip', get_local_ip())
+                streamer_ip = stream_info.get('streamer_ip')
+                if not streamer_ip:
+                    raise Exception("Streamer IP address not available")
+                    
                 print(f"Connecting to streamer at {streamer_ip}:8765")
                 
-                # Add connection retry logic
+                # Create peer connection with STUN server
+                pc = RTCPeerConnection(configuration=RTCConfiguration([
+                    RTCIceServer(urls=["stun:stun.l.google.com:19302"])
+                ]))
+                
+                # Set up track handler before connecting
+                @pc.on("track")
+                def on_track(track):
+                    nonlocal video_track
+                    if track.kind == "video":
+                        print(f"Received video track: kind={track.kind}, id={track.id}")  # Debug log
+                        video_track = track
+                        status_label.config(text="Stream connected")
+                        print("Starting display loop...")  # Debug log
+                        # Start video display loop using the existing event loop
+                        self.loop.create_task(display_video())
+                
+                # Add connection state change handler
+                @pc.on("connectionstatechange")
+                async def on_connectionstatechange():
+                    state = pc.connectionState
+                    print(f"Connection state changed to: {state}")
+                    status_label.config(text=f"Connection: {state}")
+                    
+                    if state == "connected":
+                        print("Connection established, waiting for video track...")
+                    elif state == "failed":
+                        print("Connection failed, closing...")
+                        await handle_close()
+                
+                # Add ICE connection state change handler
+                @pc.on("iceconnectionstatechange")
+                async def on_iceconnectionstatechange():
+                    print(f"ICE connection state: {pc.iceConnectionState}")
+                    if pc.iceConnectionState == "failed":
+                        print("ICE connection failed")
+                        await handle_close()
+                
+                # Connection retry logic with increasing delays
                 max_retries = 3
                 retry_count = 0
-                while retry_count < max_retries:
+                retry_delays = [1, 2, 4]  # Exponential backoff
+                
+                while retry_count < max_retries and running:
                     try:
                         # Create WebSocket connection for signaling
-                        async with websockets.connect(f'ws://{streamer_ip}:8765') as websocket:
+                        async with websockets.connect(
+                            f'ws://{streamer_ip}:8765',
+                            ping_interval=None,  # Disable ping to prevent timeouts
+                            ping_timeout=None,
+                            close_timeout=10  # Add close timeout
+                        ) as websocket:
                             print("WebSocket connection established")
                             status_label.config(text="Connected to streamer")
                             
                             # Send join message
-                            await websocket.send(json.dumps({
+                            join_message = {
                                 "type": "join",
                                 "viewer_id": self.chat_client.username
-                            }))
+                            }
+                            print(f"Sending join message: {join_message}")
+                            await websocket.send(json.dumps(join_message))
                             
-                            # Wait for offer
-                            response = await websocket.recv()
-                            data = json.loads(response)
-                            
-                            if data["type"] == "offer":
-                                # Create peer connection
-                                pc = RTCPeerConnection(configuration=RTCConfiguration([
-                                    RTCIceServer(urls=["stun:stun.l.google.com:19302"])
-                                ]))
+                            # Wait for offer with timeout
+                            try:
+                                print("Waiting for offer...")
+                                response = await asyncio.wait_for(websocket.recv(), timeout=5.0)
+                                data = json.loads(response)
+                                print(f"Received response: {data}")
                                 
-                                # Set remote description
-                                await pc.setRemoteDescription(RTCSessionDescription(
-                                    sdp=data["offer"]["sdp"],
-                                    type=data["offer"]["type"]
-                                ))
-                                
-                                # Create and set local description
-                                answer = await pc.createAnswer()
-                                await pc.setLocalDescription(answer)
-                                
-                                # Send answer
-                                await websocket.send(json.dumps({
-                                    "type": "answer",
-                                    "viewer_id": self.chat_client.username,
-                                    "answer": {
-                                        "sdp": pc.localDescription.sdp,
-                                        "type": pc.localDescription.type
-                                    }
-                                }))
-                                
-                                # Handle ICE candidates
-                                @pc.on("icecandidate")
-                                async def on_icecandidate(candidate):
-                                    if candidate:
-                                        await websocket.send(json.dumps({
-                                            "type": "ice_candidate",
-                                            "viewer_id": self.chat_client.username,
-                                            "candidate": candidate.candidate
-                                        }))
-                                
-                                # Handle video track
-                                @pc.on("track")
-                                def on_track(track):
-                                    nonlocal video_track
-                                    if track.kind == "video":
-                                        video_track = track
-                                        status_label.config(text="Stream connected")
-                                        print("Video track received")
-                                        # Start video display loop using the existing event loop
-                                        self.loop.create_task(display_video())
-                                
-                                # Handle ICE candidates from server
-                                while True:
-                                    response = await websocket.recv()
-                                    data = json.loads(response)
+                                if data["type"] == "offer":
+                                    print("Processing offer...")
+                                    # Set remote description
+                                    await pc.setRemoteDescription(RTCSessionDescription(
+                                        sdp=data["offer"]["sdp"],
+                                        type=data["offer"]["type"]
+                                    ))
                                     
-                                    if data["type"] == "ice_candidate":
-                                        await pc.addIceCandidate(RTCIceCandidate(
-                                            sdpMid=data["candidate"]["sdpMid"],
-                                            sdpMLineIndex=data["candidate"]["sdpMLineIndex"],
-                                            candidate=data["candidate"]["candidate"]
-                                        ))
+                                    # Create and set local description
+                                    answer = await pc.createAnswer()
+                                    await pc.setLocalDescription(answer)
+                                    
+                                    print("Sending answer...")
+                                    await websocket.send(json.dumps({
+                                        "type": "answer",
+                                        "viewer_id": self.chat_client.username,
+                                        "answer": {
+                                            "sdp": pc.localDescription.sdp,
+                                            "type": pc.localDescription.type
+                                        }
+                                    }))
+                                    
+                                    # Handle ICE candidates
+                                    @pc.on("icecandidate")
+                                    async def on_ice_candidate(event):
+                                        if event.candidate and running:
+                                            print(f"Sending ICE candidate: {event.candidate}")
+                                            await websocket.send(json.dumps({
+                                                "type": "ice_candidate",
+                                                "viewer_id": self.chat_client.username,
+                                                "candidate": {
+                                                    "candidate": event.candidate.candidate,
+                                                    "sdpMid": event.candidate.sdpMid,
+                                                    "sdpMLineIndex": event.candidate.sdpMLineIndex
+                                                }
+                                            }))
+                                    
+                                    # Keep connection alive and handle incoming messages
+                                    while running:
+                                        try:
+                                            print("Waiting for ICE candidates...")
+                                            message = await websocket.recv()
+                                            data = json.loads(message)
+                                            
+                                            if data["type"] == "ice_candidate" and data.get("candidate"):
+                                                print("Processing ICE candidate...")
+                                                candidate = data["candidate"]
+                                                await pc.addIceCandidate(RTCIceCandidate(
+                                                    sdpMid=candidate["sdpMid"],
+                                                    sdpMLineIndex=candidate["sdpMLineIndex"],
+                                                    candidate=candidate["candidate"]
+                                                ))
+                                                print("ICE candidate added successfully")
+                                                
+                                        except websockets.exceptions.ConnectionClosed:
+                                            print("WebSocket connection closed")
+                                            break
+                                            
+                                        except Exception as e:
+                                            print(f"Error handling message: {e}")
+                                            if not websocket.open or not running:
+                                                break
+                                            
+                            except asyncio.TimeoutError:
+                                print("Timeout waiting for offer")
+                                raise Exception("Timeout waiting for offer")
                                 
-                                break  # Successfully connected, exit retry loop
-                                
-                    except websockets.exceptions.WebSocketException:
+                    except websockets.exceptions.WebSocketException as e:
                         retry_count += 1
-                        if retry_count < max_retries:
-                            print(f"Connection refused, retrying ({retry_count}/{max_retries})...")
-                            await asyncio.sleep(1)  # Wait before retrying
+                        if retry_count < max_retries and running:
+                            delay = retry_delays[retry_count - 1]
+                            print(f"Connection refused, retrying in {delay}s ({retry_count}/{max_retries})...")
+                            status_label.config(text=f"Connection failed, retrying {retry_count}/{max_retries}...")
+                            await asyncio.sleep(delay)
                         else:
                             raise Exception("Failed to connect to streamer after multiple attempts")
                             
@@ -820,14 +1096,13 @@ class ChatGUI:
                 print(f"Error connecting to stream: {e}")
                 status_label.config(text="Connection failed")
                 messagebox.showerror("Error", f"Failed to connect to stream: {str(e)}")
-                
-        def on_closing():
-            """Handle window close"""
-            if pc:
-                self.loop.create_task(pc.close())
-            viewer_window.destroy()
-            
-        viewer_window.protocol("WM_DELETE_WINDOW", on_closing)
+                await handle_close()
+        
+        # Start message update loop
+        self.loop.create_task(update_stream_messages())
+        
+        # Handle window close event
+        viewer_window.protocol("WM_DELETE_WINDOW", lambda: self.loop.create_task(handle_close()))
         
         # Start connection using the existing event loop
         self.loop.create_task(connect_to_stream())
@@ -1192,18 +1467,16 @@ class ChatGUI:
         # Create stream window
         self.stream_window = tk.Toplevel(self.root)
         self.stream_window.title(f"Stream - {self.current_channel}")
-        self.stream_window.geometry("800x700")
+        self.stream_window.geometry("1200x700")  # Increased width to accommodate chat
         self.stream_window.configure(bg=self.colors['dark_bg'])
         
-        # Create video frame
-        video_frame = tk.Frame(
-            self.stream_window,
-            width=640,
-            height=480,
-            bg="black"
-        )
-        video_frame.pack(pady=20)
-        video_frame.pack_propagate(False)
+        # Create main frame
+        main_frame = ttk.Frame(self.stream_window, style='Main.TFrame')
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Create left frame for video
+        video_frame = ttk.Frame(main_frame, style='Main.TFrame')
+        video_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
         
         # Create video display label
         self.video_label = tk.Label(
@@ -1211,15 +1484,17 @@ class ChatGUI:
             text="Initializing camera...",
             font=("Arial", 14),
             fg="white",
-            bg="black",
-            width=640,
-            height=480
+            bg="black"
         )
         self.video_label.pack(fill=tk.BOTH, expand=True)
         
+        # Configure video frame with fixed size
+        video_frame.configure(width=640, height=480)
+        video_frame.pack_propagate(False)
+        
         # Create controls frame
-        controls_frame = tk.Frame(self.stream_window, bg=self.colors['dark_bg'])
-        controls_frame.pack(pady=10)
+        controls_frame = ttk.Frame(video_frame, style='Main.TFrame')
+        controls_frame.pack(fill=tk.X, padx=5, pady=5)
         
         # Initialize viewer count
         self.viewer_count = 0
@@ -1232,7 +1507,7 @@ class ChatGUI:
             fg="white",
             bg=self.colors['dark_bg']
         )
-        self.viewer_count_label.pack(pady=5)
+        self.viewer_count_label.pack(side=tk.LEFT, pady=5)
         
         # Create stream control button
         self.stream_button = tk.Button(
@@ -1241,7 +1516,62 @@ class ChatGUI:
             font=("Arial", 12),
             command=self._toggle_stream
         )
-        self.stream_button.pack(pady=5)
+        self.stream_button.pack(side=tk.RIGHT, pady=5)
+
+        # Create right frame for chat
+        chat_frame = ttk.Frame(main_frame, style='Main.TFrame')
+        chat_frame.pack(side=tk.RIGHT, fill=tk.BOTH, padx=(5, 0))
+        
+        # Configure chat frame with fixed width
+        chat_frame.configure(width=400)
+        chat_frame.pack_propagate(False)
+        
+        # Chat header
+        chat_header = ttk.Label(chat_frame,
+                              text="Stream Chat",
+                              style='Discord.TLabel',
+                              font=('Helvetica', 14, 'bold'))
+        chat_header.pack(pady=(0, 5))
+        
+        # Chat display
+        self.stream_chat_display = scrolledtext.ScrolledText(
+            chat_frame,
+            wrap=tk.WORD,
+            bg=self.colors['light_bg'],
+            fg=self.colors['text'],
+            font=('Helvetica', 10),
+            state=tk.DISABLED,
+            height=20
+        )
+        self.stream_chat_display.pack(fill=tk.BOTH, expand=True, pady=(0, 5))
+        
+        # Configure chat display tags
+        self.stream_chat_display.tag_configure("error", foreground="red")
+        self.stream_chat_display.tag_configure("timestamp", foreground=self.colors['secondary_text'])
+        
+        # Chat input frame
+        chat_input_frame = ttk.Frame(chat_frame, style='Main.TFrame')
+        chat_input_frame.pack(fill=tk.X, pady=(5, 0))
+        
+        # Chat input field
+        self.stream_chat_entry = ttk.Entry(chat_input_frame, style='Discord.TEntry')
+        self.stream_chat_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+        
+        # Send button
+        send_btn = tk.Button(chat_input_frame,
+                           text="Send",
+                           command=lambda: self.loop.create_task(self._send_stream_message()),
+                           bg=self.colors['accent'],
+                           fg=self.colors['text'],
+                           font=('Helvetica', 10),
+                           relief=tk.FLAT)
+        send_btn.pack(side=tk.RIGHT)
+        
+        # Bind Enter key to send message
+        self.stream_chat_entry.bind('<Return>', lambda e: self.loop.create_task(self._send_stream_message()))
+        
+        # Start message update loop when streaming starts
+        self.stream_messages_task = None
             
         # Set up closing protocol
         def on_closing():
@@ -1253,6 +1583,82 @@ class ChatGUI:
                 self.stream_window.destroy()
                 
         self.stream_window.protocol("WM_DELETE_WINDOW", on_closing)
+
+    async def _send_stream_message(self):
+        """Send a chat message in the stream"""
+        if not self.stream_active:
+            return
+            
+        message = self.stream_chat_entry.get().strip()
+        if not message:
+            return
+            
+        # Clear input field
+        self.stream_chat_entry.delete(0, tk.END)
+        
+        # Create message data
+        msg_data = {
+            "type": "STREAM_MESSAGE",
+            "token": self.chat_client.token,
+            "channel": self.current_channel,
+            "content": message,
+            "username": self.chat_client.username,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # Send to central server
+        response = self.chat_client._send_to_central_server(msg_data)
+        
+        if response.get("success"):
+            # Message will be displayed through the update mechanism
+            pass
+        else:
+            # Show error in chat
+            self._display_stream_chat_message("System", "Failed to send message", error=True)
+
+    def _display_stream_chat_message(self, username, content, error=False):
+        """Display a chat message in the stream chat display"""
+        if not hasattr(self, 'stream_chat_display'):
+            return
+            
+        self.stream_chat_display.config(state=tk.NORMAL)
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        
+        if error:
+            # Show error messages in red
+            self.stream_chat_display.insert(tk.END, f"[{timestamp}] ", "timestamp")
+            self.stream_chat_display.insert(tk.END, f"{content}\n", "error")
+        else:
+            self.stream_chat_display.insert(tk.END, f"[{timestamp}] {username}: {content}\n")
+        
+        self.stream_chat_display.see(tk.END)
+        self.stream_chat_display.config(state=tk.DISABLED)
+
+    async def _update_stream_messages(self):
+        """Periodically check for new stream messages"""
+        last_message_id = 0
+        while self.stream_active:
+            try:
+                # Get new messages from server
+                request = {
+                    "type": "GET_STREAM_MESSAGES",
+                    "token": self.chat_client.token,
+                    "channel": self.current_channel,
+                    "since_id": last_message_id
+                }
+                
+                response = self.chat_client._send_to_central_server(request)
+                if response.get("success"):
+                    messages = response.get("messages", [])
+                    for msg in messages:
+                        self._display_stream_chat_message(msg["username"], msg["content"])
+                        last_message_id = max(last_message_id, msg.get("id", 0))
+                
+                await asyncio.sleep(1)  # Check every second
+                
+            except Exception as e:
+                print(f"Error updating stream messages: {e}")
+                await asyncio.sleep(1)
 
     def _toggle_stream(self):
         """Toggle stream start/stop"""
@@ -1276,6 +1682,9 @@ class ChatGUI:
             self.stream_handler.set_channel(self.current_channel)
             self.stream_handler.set_streamer(self.chat_client.username, self.chat_client.token)
             
+            # Set viewer count callback
+            self.stream_handler.set_viewer_callback(self.update_viewer_count)
+            
             # Start the stream first
             success = await self.stream_handler.start_stream()
             if success:
@@ -1289,6 +1698,10 @@ class ChatGUI:
                 # Update UI to show stream is active
                 self.stream_button.config(text="Stop Stream")
                 self.update_viewer_count(0)  # Initialize viewer count
+                
+                # Start message update loop
+                self.stream_messages_task = self.loop.create_task(self._update_stream_messages())
+                
                 return True
             else:
                 messagebox.showerror("Error", "Failed to start stream")
@@ -1321,7 +1734,7 @@ class ChatGUI:
                     image.thumbnail((display_width, display_height), Image.LANCZOS)
                     
                     # Convert to PhotoImage
-                    photo = ImageTk.PhotoImage(image)
+                    photo = ImageTk.PhotoImage(image=image)
                     
                     # Update label with new image
                     # Keep a reference to avoid garbage collection
@@ -1340,11 +1753,26 @@ class ChatGUI:
     async def _stop_stream(self):
         """Stop the current stream"""
         try:
+            # Cancel message update task if running
+            if self.stream_messages_task and not self.stream_messages_task.done():
+                self.stream_messages_task.cancel()
+                try:
+                    await self.stream_messages_task
+                except asyncio.CancelledError:
+                    pass
+            
             await self.stream_handler.stop_stream()
             self.stream_active = False
             # Update UI to show stream is stopped
             self.stream_button.config(text="Start Stream")
             self.update_viewer_count(0)
+            
+            # Clear chat display but don't delete messages (they're saved on server)
+            if hasattr(self, 'stream_chat_display'):
+                self.stream_chat_display.config(state=tk.NORMAL)
+                self.stream_chat_display.delete('1.0', tk.END)
+                self.stream_chat_display.config(state=tk.DISABLED)
+                
         except Exception as e:
             print(f"Error stopping stream: {e}")
             messagebox.showerror("Error", f"Failed to stop stream: {str(e)}")
@@ -1354,7 +1782,7 @@ class ChatGUI:
         if hasattr(self, 'viewer_count_label'):
             self.viewer_count_label.config(text=f"Viewers: {count}")
 
-    def _check_and_join_stream(self):
+    async def _check_and_join_stream(self):
         """Check for active stream and join if available"""
         if not self.current_channel:
             messagebox.showwarning("Warning", "Please join a channel first")
@@ -1365,13 +1793,20 @@ class ChatGUI:
         print(f"Stream info received: {stream_info}")  # Debug log
         
         if stream_info:
+            # Verify streamer IP is available
+            streamer_ip = stream_info.get('streamer_ip')
+            if not streamer_ip:
+                messagebox.showerror("Error", "Cannot connect to stream: Streamer IP address not available")
+                return
+                
+            print(f"Found active stream from {stream_info.get('streamer')} at {streamer_ip}")
             if messagebox.askyesno("Join Stream", 
                 f"There is an active stream in this channel by {stream_info.get('streamer', 'Unknown')}.\nWould you like to join?"):
-                self._show_viewer_window(self.current_channel, stream_info)
+                await self._show_viewer_window(self.current_channel, stream_info)
         else:
             print("No stream info received")  # Debug log
             messagebox.showinfo("No Stream", "There is no active stream in this channel.")
-
+    
     def run(self):
         try:
             self.root.mainloop()

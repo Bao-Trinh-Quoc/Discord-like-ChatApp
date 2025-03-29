@@ -34,5 +34,6 @@ featuress right now:
 - ...
 
 important features need to be implemented:
-- livestreaming <--- MOST IMPORTANT
+- livestreaming <--- MOST IMPORTANT < IMPLEMENTED BUT STILL CAN BE BUG>
+- user fetch < ---- IMPORTANT ---- >
 - multimedia sharing <--- COULD BE LATER

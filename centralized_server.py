@@ -4,6 +4,7 @@ import json
 import time
 import argparse
 from datetime import datetime
+import os
 
 from database import db
 from logger import system_logger
@@ -30,6 +31,8 @@ MSG_STREAM_END = "STREAM_END"
 MSG_STREAM_JOIN = "STREAM_JOIN"
 MSG_STREAM_LEAVE = "STREAM_LEAVE"
 MSG_GET_STREAM_INFO = "GET_STREAM_INFO"
+MSG_STREAM_MESSAGE = "STREAM_MESSAGE"
+MSG_GET_STREAM_MESSAGES = "GET_STREAM_MESSAGES"
 
 class CentralServer:
     def __init__(self, host, port):
@@ -39,6 +42,18 @@ class CentralServer:
         self.server_socket = None
         self.clients = {}  # Maps client address to client data
         self.active_streams = {}  # channel -> {streamer, viewers, start_time}
+        self.stream_messages = {}  # channel -> list of messages
+        self.last_message_id = 0  # Global message ID counter
+        self.stream_messages_dir = os.path.join("database", "stream_messages")  # Directory to store stream messages
+        
+        # Create database and stream messages directories if they don't exist
+        if not os.path.exists("database"):
+            os.makedirs("database")
+        if not os.path.exists(self.stream_messages_dir):
+            os.makedirs(self.stream_messages_dir)
+        
+        # Load any existing stream messages
+        self._load_stream_messages()
         
         # Cleanup thread for expired sessions and inactive peers
         self.cleanup_thread = threading.Thread(target=self._cleanup_routine)
@@ -117,7 +132,11 @@ class CentralServer:
             message_type = request.get("type")
             
             # Process the request based on its type
-            if message_type == MSG_REGISTER:
+            if message_type == MSG_STREAM_MESSAGE:
+                response = self._handle_stream_message(request, client_info)
+            elif message_type == MSG_GET_STREAM_MESSAGES:
+                response = self._handle_get_stream_messages(request, client_info)
+            elif message_type == MSG_REGISTER:
                 response = self._handle_register(request, client_info)
             elif message_type == MSG_HEARTBEAT:
                 response = self._handle_heartbeat(request, client_info)
@@ -590,6 +609,7 @@ class CentralServer:
         """Handle request to start a stream"""
         token = request.get("token")
         channel_name = request.get("channel")
+        streamer_ip = request.get("streamer_ip")  # Get streamer's IP from request
         
         # Validate session
         valid, msg, username = auth.validate_session(token)
@@ -616,6 +636,7 @@ class CentralServer:
         # Start new stream
         self.active_streams[channel_name] = {
             "streamer": username,
+            "streamer_ip": streamer_ip,  # Store streamer's IP
             "viewers": set(),
             "start_time": datetime.now().isoformat()
         }
@@ -628,6 +649,7 @@ class CentralServer:
             "message": "Stream started successfully",
             "stream_info": {
                 "streamer": username,
+                "streamer_ip": streamer_ip,  # Include IP in response
                 "start_time": self.active_streams[channel_name]["start_time"]
             }
         }
@@ -741,9 +763,77 @@ class CentralServer:
             "type": MSG_SUCCESS,
             "stream_info": {
                 "streamer": stream_info["streamer"],
+                "streamer_ip": stream_info["streamer_ip"],  # Include IP in response
                 "viewer_count": len(stream_info["viewers"]),
                 "start_time": stream_info["start_time"]
             }
+        }
+    
+    def _handle_stream_message(self, request, client_info):
+        """Handle a stream chat message"""
+        token = request.get("token")
+        channel_name = request.get("channel")
+        content = request.get("content")
+        username = request.get("username")
+        timestamp = request.get("timestamp")
+        
+        # Validate session
+        valid, msg, _ = auth.validate_session(token)
+        if not valid:
+            return {"success": False, "type": MSG_ERROR, "message": msg}
+        
+        # Check if stream exists
+        if channel_name not in self.active_streams:
+            return {"success": False, "type": MSG_ERROR, "message": "No active stream in this channel"}
+        
+        # Create message object
+        self.last_message_id += 1
+        message = {
+            "id": self.last_message_id,
+            "username": username,
+            "content": content,
+            "timestamp": timestamp,
+            "stream_id": self.active_streams[channel_name].get("stream_id", "")
+        }
+        
+        # Store message
+        if channel_name not in self.stream_messages:
+            self.stream_messages[channel_name] = []
+        self.stream_messages[channel_name].append(message)
+        
+        # Save messages to file
+        self._save_stream_messages(channel_name)
+        
+        # Log the message
+        system_logger.log_message(channel_name, username, self.last_message_id)
+        
+        return {
+            "success": True,
+            "type": MSG_SUCCESS,
+            "message": "Message sent successfully",
+            "message_id": self.last_message_id
+        }
+    
+    def _handle_get_stream_messages(self, request, client_info):
+        """Handle request for stream chat messages"""
+        token = request.get("token")
+        channel_name = request.get("channel")
+        since_id = request.get("since_id", 0)
+        
+        # Validate session
+        valid, msg, _ = auth.validate_session(token)
+        if not valid:
+            return {"success": False, "type": MSG_ERROR, "message": msg}
+        
+        # Get messages since the specified ID
+        messages = []
+        if channel_name in self.stream_messages:
+            messages = [msg for msg in self.stream_messages[channel_name] if msg["id"] > since_id]
+        
+        return {
+            "success": True,
+            "type": MSG_SUCCESS,
+            "messages": messages
         }
     
     def _cleanup_routine(self):
@@ -756,6 +846,40 @@ class CentralServer:
             
             # Sleep for 60 seconds before next cleanup
             time.sleep(60)
+
+    async def stop_stream(self):
+        """Stop the stream and save messages"""
+        # ... existing stop_stream code ...
+        
+        # Save stream messages before clearing
+        if self.channel in self.stream_messages:
+            self._save_stream_messages(self.channel)
+
+    def _load_stream_messages(self):
+        """Load stream messages from JSON files"""
+        try:
+            for filename in os.listdir(self.stream_messages_dir):
+                if filename.endswith('.json'):
+                    channel_name = filename[:-5]  # Remove .json extension
+                    file_path = os.path.join(self.stream_messages_dir, filename)
+                    with open(file_path, 'r') as f:
+                        messages = json.load(f)
+                        self.stream_messages[channel_name] = messages
+                        # Update last_message_id
+                        if messages:
+                            self.last_message_id = max(self.last_message_id,
+                                                     max(msg.get('id', 0) for msg in messages))
+        except Exception as e:
+            print(f"Error loading stream messages: {e}")
+    
+    def _save_stream_messages(self, channel_name):
+        """Save stream messages to JSON file"""
+        try:
+            file_path = os.path.join(self.stream_messages_dir, f"{channel_name}.json")
+            with open(file_path, 'w') as f:
+                json.dump(self.stream_messages.get(channel_name, []), f, indent=2)
+        except Exception as e:
+            print(f"Error saving stream messages: {e}")
 
 def get_local_ip():
     """Get the local IP address"""
