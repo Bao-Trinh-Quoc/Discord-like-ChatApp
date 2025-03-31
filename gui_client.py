@@ -70,8 +70,15 @@ class ChatGUI:
             'input_bg': '#40444B',  # Discord input background
             'online': '#43B581',    # Discord online status color
             'invisible': '#747F8D',  # Discord invisible status color
-            'error': '#F04747'      # Discord error color
+            'error': '#F04747',      # Discord error color
+            'notification': '#F04747'  # Notification color (red)
         }
+        
+        # Initialize notification variables
+        self.last_notification_id = 0
+        self.notification_windows = []
+        self.notification_update_thread = None
+        self.online_users_update_thread = None
         
         # Initialize chat client with auto-detected server IP
         self.chat_client = ChatClient(get_local_ip(), 8000)
@@ -492,10 +499,16 @@ class ChatGUI:
         self._refresh_channels()
         
         # Start online users refresh thread
-        if not hasattr(self, 'online_users_update_thread') or not self.online_users_update_thread.is_alive():
+        if self.online_users_update_thread is None or not self.online_users_update_thread.is_alive():
             self.online_users_update_thread = threading.Thread(target=self._update_online_users)
             self.online_users_update_thread.daemon = True
             self.online_users_update_thread.start()
+
+        # Start notification update thread
+        if self.notification_update_thread is None or not self.notification_update_thread.is_alive():
+            self.notification_update_thread = threading.Thread(target=self._update_notifications)
+            self.notification_update_thread.daemon = True
+            self.notification_update_thread.start()
 
     def _handle_login(self):
         username = self.username_entry.get()
@@ -574,6 +587,11 @@ class ChatGUI:
             self.chat_client.logout()
         self.running = False
         self.last_message_ids.clear()  # Clear message history tracking
+        
+        # Stop message update thread if running
+        if self.message_update_thread and self.message_update_thread.is_alive():
+            self.message_update_thread = None
+            
         self.show_login_frame()
     
     def _refresh_channels(self):
@@ -640,6 +658,16 @@ class ChatGUI:
             
             # Set current channel
             self.current_channel = channel_name
+            
+            # Initialize last message ID for this channel if not exists
+            if channel_name not in self.last_message_ids:
+                self.last_message_ids[channel_name] = 0
+                
+            # Start message update thread if not already running
+            if self.message_update_thread is None or not self.message_update_thread.is_alive():
+                self.message_update_thread = threading.Thread(target=self._update_messages)
+                self.message_update_thread.daemon = True
+                self.message_update_thread.start()
             
             # Check for active stream
             stream_info = self.chat_client.get_stream_info(channel_name)
@@ -1152,6 +1180,10 @@ class ChatGUI:
         while self.running:
             try:
                 if self.current_channel:
+                    # Initialize last_message_ids for the channel if not exists
+                    if self.current_channel not in self.last_message_ids:
+                        self.last_message_ids[self.current_channel] = 0
+                        
                     last_id = self.last_message_ids.get(self.current_channel, 0)
                     messages = self.chat_client.get_channel_history(
                         self.current_channel, 
@@ -1167,7 +1199,7 @@ class ChatGUI:
                                 self.chat_display.insert(tk.END, formatted_msg)
                                 if "id" in msg:
                                     self.last_message_ids[self.current_channel] = max(
-                                        self.last_message_ids[self.current_channel],
+                                        self.last_message_ids.get(self.current_channel, 0),
                                         msg["id"]
                                     )
                             except Exception as e:
@@ -1178,7 +1210,7 @@ class ChatGUI:
             except Exception as e:
                 print(f"Error in update messages: {e}")
                 
-            time.sleep(1)
+            time.sleep(1)  # Check every second
     
     def _show_status_dialog(self):
         """Show dialog for changing user status"""
@@ -1807,6 +1839,140 @@ class ChatGUI:
             print("No stream info received")  # Debug log
             messagebox.showinfo("No Stream", "There is no active stream in this channel.")
     
+    def _show_notification(self, notification):
+        """Display a notification popup"""
+        # Create notification window
+        notif_window = tk.Toplevel(self.root)
+        notif_window.overrideredirect(True)  # Remove window decorations
+        notif_window.configure(bg=self.colors['dark_bg'])
+        
+        # Calculate position (bottom right of screen)
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        window_width = 300
+        window_height = 100
+        x_position = screen_width - window_width - 20
+        y_position = screen_height - window_height - 40 - (len(self.notification_windows) * (window_height + 10))
+        
+        notif_window.geometry(f"{window_width}x{window_height}+{x_position}+{y_position}")
+        
+        # Add to list of active notifications
+        self.notification_windows.append(notif_window)
+        
+        # Create notification content
+        content_frame = ttk.Frame(notif_window, style='Main.TFrame')
+        content_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Notification type icon/text
+        if notification["type"] == "new_message":
+            icon_text = "💬"
+        elif notification["type"] == "stream_start":
+            icon_text = "🎥"
+        else:
+            icon_text = "📢"
+            
+        icon_label = ttk.Label(content_frame,
+                             text=icon_text,
+                             style='Discord.TLabel',
+                             font=('Helvetica', 14))
+        icon_label.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Notification message
+        message_label = ttk.Label(content_frame,
+                                text=notification["content"],
+                                style='Discord.TLabel',
+                                wraplength=200)
+        message_label.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Close button
+        close_btn = tk.Button(content_frame,
+                            text="×",
+                            command=lambda: self._close_notification(notif_window, notification["id"]),
+                            bg=self.colors['dark_bg'],
+                            fg=self.colors['text'],
+                            font=('Helvetica', 12),
+                            relief=tk.FLAT,
+                            borderwidth=0)
+        close_btn.pack(side=tk.RIGHT)
+        
+        # Auto-close after 5 seconds
+        self.root.after(5000, lambda: self._close_notification(notif_window, notification["id"]))
+        
+        # Add click handler to jump to relevant content
+        if notification["channel"]:
+            content_frame.bind("<Button-1>", lambda e: self._handle_notification_click(notification))
+            message_label.bind("<Button-1>", lambda e: self._handle_notification_click(notification))
+
+    def _close_notification(self, window, notification_id):
+        """Close a notification window"""
+        if window in self.notification_windows:
+            self.notification_windows.remove(window)
+            window.destroy()
+            
+            # Mark notification as read on server
+            request = {
+                "type": "MARK_NOTIFICATIONS_READ",
+                "token": self.chat_client.token,
+                "notification_ids": [notification_id]
+            }
+            self.chat_client._send_to_central_server(request)
+            
+            # Reposition remaining notifications
+            self._reposition_notifications()
+
+    def _reposition_notifications(self):
+        """Reposition notification windows after one is closed"""
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        window_width = 300
+        window_height = 100
+        
+        for i, window in enumerate(self.notification_windows):
+            x_position = screen_width - window_width - 20
+            y_position = screen_height - window_height - 40 - (i * (window_height + 10))
+            window.geometry(f"+{x_position}+{y_position}")
+
+    def _handle_notification_click(self, notification):
+        """Handle click on a notification"""
+        channel_name = notification["channel"]
+        if channel_name:
+            # Find and select the channel in the listbox
+            for i in range(self.channel_listbox.size()):
+                if channel_name in self.channel_listbox.get(i):
+                    self.channel_listbox.selection_clear(0, tk.END)
+                    self.channel_listbox.selection_set(i)
+                    self._join_selected_channel()
+                    break
+            
+            # If it's a stream notification, show the stream
+            if notification["type"] == "stream_start":
+                self.loop.create_task(self._check_and_join_stream())
+
+    def _update_notifications(self):
+        """Periodically check for new notifications"""
+        while self.running:
+            try:
+                # Get new notifications from server
+                request = {
+                    "type": "GET_NOTIFICATIONS",
+                    "token": self.chat_client.token,
+                    "since_id": self.last_notification_id
+                }
+                
+                response = self.chat_client._send_to_central_server(request)
+                if response.get("success"):
+                    notifications = response.get("notifications", [])
+                    for notification in notifications:
+                        # Update last notification ID
+                        self.last_notification_id = max(self.last_notification_id, notification["id"])
+                        # Show notification
+                        self.root.after(0, lambda n=notification: self._show_notification(n))
+                
+            except Exception as e:
+                print(f"Error updating notifications: {e}")
+                
+            time.sleep(5)  # Check every 5 seconds
+
     def run(self):
         try:
             self.root.mainloop()
