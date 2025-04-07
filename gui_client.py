@@ -43,7 +43,7 @@ class ChatGUI:
         
         # Create the main window
         self.root = tk.Tk()
-        self.root.title("Discord but without rd")
+        self.root.title("TCParty")
         self.root.geometry("1200x800")
         
         # Set up asyncio integration with Tkinter
@@ -710,6 +710,42 @@ class ChatGUI:
         video_frame.configure(width=640, height=480)
         video_frame.pack_propagate(False)  # Prevent frame from shrinking
 
+        # Controls and status below video display
+        status_frame = ttk.Frame(video_frame, style='Main.TFrame')
+        status_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Status label
+        status_label = ttk.Label(
+            status_frame,
+            text="Connecting to stream...",
+            style='Discord.TLabel',
+            font=('Helvetica', 12)
+        )
+        status_label.pack(side=tk.LEFT, pady=5)
+        
+        # Controls frame at the bottom of video frame
+        controls_frame = ttk.Frame(video_frame, style='Main.TFrame')
+        controls_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Connection status label (left side of controls)
+        connection_label = ttk.Label(
+            controls_frame,
+            text="Connection: connecting",
+            style='Discord.TLabel',
+            font=('Helvetica', 10)
+        )
+        connection_label.pack(side=tk.LEFT, pady=5)
+        
+        # Close button (right side of controls)
+        close_btn = tk.Button(controls_frame,
+                            text="Close",
+                            command=lambda: self.loop.create_task(handle_close()),
+                            bg=self.colors['light_bg'],
+                            fg=self.colors['text'],
+                            font=('Helvetica', 12),
+                            relief=tk.FLAT)
+        close_btn.pack(side=tk.RIGHT, padx=5)
+        
         # Create right frame for chat
         chat_frame = ttk.Frame(main_frame, style='Main.TFrame')
         chat_frame.pack(side=tk.RIGHT, fill=tk.BOTH, padx=(5, 0))
@@ -727,25 +763,24 @@ class ChatGUI:
         
         # Chat display
         chat_display = scrolledtext.ScrolledText(
-                    chat_frame,
-                    wrap=tk.WORD,
-                    bg=self.colors['light_bg'],
-                    fg=self.colors['text'],
-                    font=('Helvetica', 10),
-                    state=tk.DISABLED,
-                    height=20
-                )
+            chat_frame,
+            wrap=tk.WORD,
+            bg=self.colors['light_bg'],
+            fg=self.colors['text'],
+            font=('Helvetica', 10),
+            state=tk.DISABLED,
+            height=20
+        )
         chat_display.pack(fill=tk.BOTH, expand=True, pady=(0, 5))
         
         # Chat input frame
         chat_input_frame = ttk.Frame(chat_frame, style='Main.TFrame')
         chat_input_frame.pack(fill=tk.X, pady=(5, 0))
         
-        # Chat input field
+        # Chat input field and send button (disabled for visitors)
         chat_entry = ttk.Entry(chat_input_frame, style='Discord.TEntry')
         chat_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
         
-        # Send button
         send_btn = tk.Button(chat_input_frame,
                            text="Send",
                            command=lambda: self.loop.create_task(send_stream_message()),
@@ -754,31 +789,27 @@ class ChatGUI:
                            font=('Helvetica', 10),
                            relief=tk.FLAT)
         send_btn.pack(side=tk.RIGHT)
-
+        
+        # If user is a visitor, disable chat input and send button
+        if self.chat_client.is_visitor:
+            chat_entry.config(state=tk.DISABLED)
+            send_btn.config(state=tk.DISABLED)
+            visitor_message = ttk.Label(
+                chat_input_frame,
+                text="Visitors cannot send messages",
+                foreground="gray",
+                background=self.colors['light_bg'],
+                font=('Helvetica', 9, 'italic')
+            )
+            visitor_message.pack(side=tk.BOTTOM, fill=tk.X, pady=(5, 0))
+        else:
+            # Bind Enter key to send message (only for non-visitors)
+            chat_entry.bind('<Return>', lambda e: self.loop.create_task(send_stream_message()))
+        
         # WebRTC connection variables
         pc = None
         video_track = None
         running = True
-
-        # Controls frame
-        controls_frame = ttk.Frame(video_frame, style='Main.TFrame')
-        controls_frame.pack(fill=tk.X, padx=5, pady=5)
-        
-        # Status label
-        status_label = ttk.Label(controls_frame,
-                               text="Connecting...",
-                               style='Discord.TLabel')
-        status_label.pack(side=tk.LEFT, padx=5)
-        
-        # Close button
-        close_btn = tk.Button(controls_frame,
-                            text="Close",
-                            command=lambda: self.loop.create_task(handle_close()),
-                            bg=self.colors['light_bg'],
-                            fg=self.colors['text'],
-                            font=('Helvetica', 12),
-                            relief=tk.FLAT)
-        close_btn.pack(side=tk.RIGHT, padx=5)
 
         async def send_stream_message():
             """Send a chat message in the stream"""
@@ -995,10 +1026,11 @@ class ChatGUI:
                 async def on_connectionstatechange():
                     state = pc.connectionState
                     print(f"Connection state changed to: {state}")
-                    status_label.config(text=f"Connection: {state}")
+                    connection_label.config(text=f"Connection: {state}")
                     
                     if state == "connected":
                         print("Connection established, waiting for video track...")
+                        status_label.config(text="Waiting for video...")
                     elif state == "failed":
                         print("Connection failed, closing...")
                         await handle_close()
@@ -1496,6 +1528,11 @@ class ChatGUI:
             messagebox.showwarning("Warning", "Only channel owner can start streaming")
             return
             
+        # Visitors cannot stream
+        if self.chat_client.is_visitor:
+            messagebox.showwarning("Warning", "Visitors cannot start streaming")
+            return
+            
         # Create stream window
         self.stream_window = tk.Toplevel(self.root)
         self.stream_window.title(f"Stream - {self.current_channel}")
@@ -1619,6 +1656,11 @@ class ChatGUI:
     async def _send_stream_message(self):
         """Send a chat message in the stream"""
         if not self.stream_active:
+            return
+            
+        # Visitors cannot send messages
+        if self.chat_client.is_visitor:
+            self._display_stream_chat_message("System", "Visitors cannot send messages", error=True)
             return
             
         message = self.stream_chat_entry.get().strip()

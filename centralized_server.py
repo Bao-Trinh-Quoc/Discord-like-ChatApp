@@ -821,9 +821,17 @@ class CentralServer:
         timestamp = request.get("timestamp")
         
         # Validate session
-        valid, msg, _ = auth.validate_session(token)
+        valid, msg, auth_username = auth.validate_session(token)
         if not valid:
             return {"success": False, "type": MSG_ERROR, "message": msg}
+        
+        # Check if visitor (who cannot send messages)
+        if auth_username.startswith("visitor:"):
+            return {"success": False, "type": MSG_ERROR, "message": "Visitors cannot send messages"}
+        
+        # Verify username matches authenticated user
+        if username != auth_username:
+            return {"success": False, "type": MSG_ERROR, "message": "Username mismatch"}
         
         # Check if stream exists
         if channel_name not in self.active_streams:
