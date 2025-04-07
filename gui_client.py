@@ -71,14 +71,13 @@ class ChatGUI:
             'online': '#43B581',    # Discord online status color
             'invisible': '#747F8D',  # Discord invisible status color
             'error': '#F04747',      # Discord error color
-            'notification': '#F04747'  # Notification color (red)
         }
         
         # Initialize notification variables
         self.last_notification_id = 0
-        self.notification_windows = []
         self.notification_update_thread = None
         self.online_users_update_thread = None
+        self.running = False  # Initialize running flag
         
         # Initialize chat client with auto-detected server IP
         self.chat_client = ChatClient(get_local_ip(), 8000)
@@ -87,16 +86,6 @@ class ChatGUI:
         self.stream_handler = StreamHandler()
         self.stream_handler.chat_client = self.chat_client
         self.stream_active = False
-        
-        # Initialize chat display after colors are defined
-        self.chat_display = scrolledtext.ScrolledText(
-            self.root,
-            wrap=tk.WORD,
-            bg=self.colors['light_bg'],
-            fg=self.colors['text'],
-            font=('Helvetica', 10),
-            state=tk.DISABLED
-        )
         
         # Configure root window background
         self.root.configure(bg=self.colors['bg'])
@@ -115,12 +104,13 @@ class ChatGUI:
                            fieldbackground=self.colors['input_bg'],
                            foreground=self.colors['text'])
         
+        # Initialize other variables
         self.current_channel = None
         self.message_update_thread = None
-        self.running = False
         self.last_message_ids = {}  # Track last message ID per channel
         self.user_status = "online"  # Default status
         
+        # Create main GUI
         self._create_gui()
 
     def _create_gui(self):
@@ -443,14 +433,14 @@ class ChatGUI:
         
         # Initialize chat display with proper packing
         self.chat_display = scrolledtext.ScrolledText(
-                chat_frame,
-                wrap=tk.WORD,
-                bg=self.colors['light_bg'],
-                fg=self.colors['text'],
-                font=('Helvetica', 10),
-                state=tk.DISABLED,
-            height=20
-            )
+            chat_frame,
+            wrap=tk.WORD,
+            bg=self.colors['light_bg'],
+            fg=self.colors['text'],
+            font=('Helvetica', 10),
+            state=tk.DISABLED,
+        height=20
+        )
         self.chat_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
         # Message input frame
@@ -500,15 +490,18 @@ class ChatGUI:
         
         # Start online users refresh thread
         if self.online_users_update_thread is None or not self.online_users_update_thread.is_alive():
+            print("Starting online users update thread...")  # Debug print
             self.online_users_update_thread = threading.Thread(target=self._update_online_users)
             self.online_users_update_thread.daemon = True
             self.online_users_update_thread.start()
 
         # Start notification update thread
         if self.notification_update_thread is None or not self.notification_update_thread.is_alive():
+            print("Starting notification update thread...")  # Debug print
             self.notification_update_thread = threading.Thread(target=self._update_notifications)
             self.notification_update_thread.daemon = True
             self.notification_update_thread.start()
+            print("Notification thread started with running =", self.running)  # Debug print
 
     def _handle_login(self):
         username = self.username_entry.get()
@@ -530,7 +523,7 @@ class ChatGUI:
             
             # Initialize peer
             if self.chat_client._initialize_peer():
-                self.running = True
+                self.running = True  # Set running to True before showing main frame
                 self.show_main_frame()
             else:
                 messagebox.showerror("Error", "Failed to initialize peer connection")
@@ -599,6 +592,9 @@ class ChatGUI:
         self.channel_listbox.delete(0, tk.END)
         for name, info in channels.items():
             self.channel_listbox.insert(tk.END, f"{name} ({info['owner']})")
+            # Set default text color
+            last_index = self.channel_listbox.size() - 1
+            self.channel_listbox.itemconfig(last_index, {'fg': self.colors['text']})
     
     def _show_create_channel_dialog(self):
         dialog = tk.Toplevel(self.root)
@@ -630,12 +626,15 @@ class ChatGUI:
         if not selection:
             return
 
-        # Extract channel name from the selection (remove the owner part)
+        # Extract channel name from the selection
         channel_text = self.channel_listbox.get(selection[0])
         channel_name = channel_text.split(" (")[0]  # Get just the channel name before the owner part
 
         # Join channel
         if self.chat_client.join_channel(channel_name):
+            # Reset color to default when joining channel
+            self.channel_listbox.itemconfig(selection[0], {'fg': self.colors['text']})
+            
             # Get message history
             messages = self.chat_client.get_channel_history(channel_name)
             
@@ -643,12 +642,15 @@ class ChatGUI:
             self.chat_display.config(state=tk.NORMAL)
             self.chat_display.delete('1.0', tk.END)
             
-            # Display messages
+            # Display messages and track the last message ID
+            last_msg_id = 0
             if messages:
                 for msg in messages:
                     timestamp = msg["timestamp"].split("T")[1].split(".")[0]  # Extract time
                     message_text = f"[{timestamp}] {msg['username']}: {msg['content']}\n"
                     self.chat_display.insert(tk.END, message_text)
+                    if "id" in msg:
+                        last_msg_id = max(last_msg_id, msg["id"])
                 self.chat_display.see(tk.END)  # Scroll to bottom
             
             self.chat_display.config(state=tk.DISABLED)
@@ -659,9 +661,8 @@ class ChatGUI:
             # Set current channel
             self.current_channel = channel_name
             
-            # Initialize last message ID for this channel if not exists
-            if channel_name not in self.last_message_ids:
-                self.last_message_ids[channel_name] = 0
+            # Initialize last message ID for this channel with the latest message ID
+            self.last_message_ids[channel_name] = last_msg_id
                 
             # Start message update thread if not already running
             if self.message_update_thread is None or not self.message_update_thread.is_alive():
@@ -726,14 +727,14 @@ class ChatGUI:
         
         # Chat display
         chat_display = scrolledtext.ScrolledText(
-            chat_frame,
-            wrap=tk.WORD,
-            bg=self.colors['light_bg'],
-            fg=self.colors['text'],
-            font=('Helvetica', 10),
-            state=tk.DISABLED,
-            height=20
-        )
+                    chat_frame,
+                    wrap=tk.WORD,
+                    bg=self.colors['light_bg'],
+                    fg=self.colors['text'],
+                    font=('Helvetica', 10),
+                    state=tk.DISABLED,
+                    height=20
+                )
         chat_display.pack(fill=tk.BOTH, expand=True, pady=(0, 5))
         
         # Chat input frame
@@ -886,13 +887,12 @@ class ChatGUI:
                                     break
                                 consecutive_errors += 1
                                 continue
-                        
+                            
                         if frame is None or frame.width == 0 or frame.height == 0:
                             print("Received empty frame")
                             if last_frame is not None:
                                 frame = last_frame
-                            else:
-                                continue
+                            continue
                         
                         # Convert frame to array
                         frame_time = time.time()
@@ -1203,7 +1203,7 @@ class ChatGUI:
                                         msg["id"]
                                     )
                             except Exception as e:
-                                print(f"Error formatting message: {e}, message: {msg}")
+                                print(f"Error formatting message: {e}")
                                 continue
                         self.chat_display.see(tk.END)
                         self.chat_display.config(state=tk.DISABLED)
@@ -1841,10 +1841,15 @@ class ChatGUI:
     
     def _show_notification(self, notification):
         """Display a notification popup"""
+        print(f"Showing notification: {notification}")  # Debug print
+        
         # Create notification window
         notif_window = tk.Toplevel(self.root)
         notif_window.overrideredirect(True)  # Remove window decorations
         notif_window.configure(bg=self.colors['dark_bg'])
+        
+        # Make sure window stays on top
+        notif_window.attributes('-topmost', True)
         
         # Calculate position (bottom right of screen)
         screen_width = self.root.winfo_screenwidth()
@@ -1855,6 +1860,7 @@ class ChatGUI:
         y_position = screen_height - window_height - 40 - (len(self.notification_windows) * (window_height + 10))
         
         notif_window.geometry(f"{window_width}x{window_height}+{x_position}+{y_position}")
+        print(f"Notification window position: {x_position}, {y_position}")  # Debug print
         
         # Add to list of active notifications
         self.notification_windows.append(notif_window)
@@ -1889,11 +1895,14 @@ class ChatGUI:
                             text="×",
                             command=lambda: self._close_notification(notif_window, notification["id"]),
                             bg=self.colors['dark_bg'],
-                            fg=self.colors['text'],
+            fg=self.colors['text'],
                             font=('Helvetica', 12),
                             relief=tk.FLAT,
                             borderwidth=0)
         close_btn.pack(side=tk.RIGHT)
+        
+        # Lift window to top
+        notif_window.lift()
         
         # Auto-close after 5 seconds
         self.root.after(5000, lambda: self._close_notification(notif_window, notification["id"]))
@@ -1902,6 +1911,8 @@ class ChatGUI:
         if notification["channel"]:
             content_frame.bind("<Button-1>", lambda e: self._handle_notification_click(notification))
             message_label.bind("<Button-1>", lambda e: self._handle_notification_click(notification))
+        
+        print(f"Notification window created and displayed")  # Debug print
 
     def _close_notification(self, window, notification_id):
         """Close a notification window"""
@@ -1911,7 +1922,7 @@ class ChatGUI:
             
             # Mark notification as read on server
             request = {
-                "type": "MARK_NOTIFICATIONS_READ",
+                "type": "MARK_NOTIFICATIONS_READ",  # Use server's message type constant
                 "token": self.chat_client.token,
                 "notification_ids": [notification_id]
             }
@@ -1950,11 +1961,12 @@ class ChatGUI:
 
     def _update_notifications(self):
         """Periodically check for new notifications"""
+        print("Notification update thread running")  # Debug print
         while self.running:
             try:
                 # Get new notifications from server
                 request = {
-                    "type": "GET_NOTIFICATIONS",
+                    "type": "GET_NOTIFICATIONS",  # Use server's message type constant
                     "token": self.chat_client.token,
                     "since_id": self.last_notification_id
                 }
@@ -1962,17 +1974,31 @@ class ChatGUI:
                 response = self.chat_client._send_to_central_server(request)
                 if response.get("success"):
                     notifications = response.get("notifications", [])
-                    for notification in notifications:
-                        # Update last notification ID
-                        self.last_notification_id = max(self.last_notification_id, notification["id"])
-                        # Show notification
-                        self.root.after(0, lambda n=notification: self._show_notification(n))
+                    if notifications:
+                        print(f"Received {len(notifications)} new notifications")  # Debug print
+                        # Update channel list to highlight channels with new content
+                        for notification in notifications:
+                            channel_name = notification.get("channel")
+                            if channel_name:
+                                # Find and highlight the channel in the listbox
+                                for i in range(self.channel_listbox.size()):
+                                    item_text = self.channel_listbox.get(i)
+                                    if channel_name in item_text:
+                                        # Highlight in red if it's not the current channel
+                                        if channel_name != self.current_channel:
+                                            self.channel_listbox.itemconfig(i, {'fg': 'red'})
+                                            print(f"New message in channel: {channel_name}")  # Debug print
+                            # Update last notification ID
+                            self.last_notification_id = max(self.last_notification_id, notification["id"])
+                else:
+                    print(f"Failed to get notifications: {response.get('message')}")  # Debug print
                 
             except Exception as e:
                 print(f"Error updating notifications: {e}")
                 
             time.sleep(5)  # Check every 5 seconds
-
+        print("Notification update thread stopped")  # Debug print
+    
     def run(self):
         try:
             self.root.mainloop()

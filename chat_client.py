@@ -595,11 +595,11 @@ class ChatClient:
         response = self._send_to_central_server(request)
 
         # Debug print
-        print(f"ChatClient get_channel_history response: {response}")
+        # print(f"ChatClient get_channel_history response: {response}")
 
         if response.get("success"):
             messages = response.get("messages", [])
-            print(f"Retrieved {len(messages)} messages for {channel_name}")
+            # print(f"Retrieved {len(messages)} messages for {channel_name}")
             return messages
         else:
             print(f"Failed to get history: {response.get('message')}")

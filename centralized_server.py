@@ -33,6 +33,8 @@ MSG_STREAM_LEAVE = "STREAM_LEAVE"
 MSG_GET_STREAM_INFO = "GET_STREAM_INFO"
 MSG_STREAM_MESSAGE = "STREAM_MESSAGE"
 MSG_GET_STREAM_MESSAGES = "GET_STREAM_MESSAGES"
+MSG_GET_NOTIFICATIONS = "GET_NOTIFICATIONS"  # Add notification message types
+MSG_MARK_NOTIFICATIONS_READ = "MARK_NOTIFICATIONS_READ"
 
 class CentralServer:
     def __init__(self, host, port):
@@ -45,6 +47,10 @@ class CentralServer:
         self.stream_messages = {}  # channel -> list of messages
         self.last_message_id = 0  # Global message ID counter
         self.stream_messages_dir = os.path.join("database", "stream_messages")  # Directory to store stream messages
+        
+        # Add notification tracking
+        self.notifications = {}  # username -> list of notifications
+        self.last_notification_id = 0  # Global notification ID counter
         
         # Create database and stream messages directories if they don't exist
         if not os.path.exists("database"):
@@ -130,6 +136,7 @@ class CentralServer:
                 return
                 
             message_type = request.get("type")
+            print(f"Received request type: {message_type}")  # Debug print
             
             # Process the request based on its type
             if message_type == MSG_STREAM_MESSAGE:
@@ -172,6 +179,10 @@ class CentralServer:
                 response = self._handle_stream_leave(request, client_info)
             elif message_type == MSG_GET_STREAM_INFO:
                 response = self._handle_get_stream_info(request, client_info)
+            elif message_type == MSG_GET_NOTIFICATIONS:
+                response = self._handle_get_notifications(request, client_info)
+            elif message_type == MSG_MARK_NOTIFICATIONS_READ:
+                response = self._handle_mark_notifications_read(request, client_info)
 
             # Send response
             response_data = json.dumps(response).encode('utf-8')
@@ -534,6 +545,22 @@ class CentralServer:
         msg_id = db.add_message(channel_name, username, content)
         if msg_id:
             system_logger.log_channel_event(channel_name, f"Message sent by {username}", username)
+            
+            # Get online users
+            online_users = db.get_online_users()
+            print(f"Online users: {list(online_users.keys())}")  # Debug print
+            
+            # Add notifications for channel members who are online (except sender)
+            for member in channel["members"]:
+                if member != username and member in online_users:
+                    print(f"Adding notification for online channel member: {member}")  # Debug print
+                    self._add_notification(
+                        member,
+                        "new_message",
+                        f"New message from {username} in {channel_name}",
+                        channel_name
+                    )
+            
             return {
                 "success": True,
                 "type": MSG_SUCCESS,
@@ -609,7 +636,7 @@ class CentralServer:
         """Handle request to start a stream"""
         token = request.get("token")
         channel_name = request.get("channel")
-        streamer_ip = request.get("streamer_ip")  # Get streamer's IP from request
+        streamer_ip = request.get("streamer_ip")
         
         # Validate session
         valid, msg, username = auth.validate_session(token)
@@ -643,13 +670,29 @@ class CentralServer:
         
         system_logger.log_channel_event(channel_name, "stream_started", username)
         
+        # Get online users
+        online_users = db.get_online_users()
+        print(f"Online users: {list(online_users.keys())}")  # Debug print
+        
+        # Add notifications for channel members who are online (except streamer)
+        if channel:
+            for member in channel["members"]:
+                if member != username and member in online_users:
+                    print(f"Adding stream notification for online channel member: {member}")  # Debug print
+                    self._add_notification(
+                        member,
+                        "stream_start",
+                        f"{username} started streaming in {channel_name}",
+                        channel_name
+                    )
+        
         return {
             "success": True,
             "type": MSG_SUCCESS,
             "message": "Stream started successfully",
             "stream_info": {
                 "streamer": username,
-                "streamer_ip": streamer_ip,  # Include IP in response
+                "streamer_ip": streamer_ip,
                 "start_time": self.active_streams[channel_name]["start_time"]
             }
         }
@@ -880,6 +923,68 @@ class CentralServer:
                 json.dump(self.stream_messages.get(channel_name, []), f, indent=2)
         except Exception as e:
             print(f"Error saving stream messages: {e}")
+
+    def _add_notification(self, username, notification_type, content, channel=None):
+        """Add a notification for a user"""
+        self.last_notification_id += 1
+        notification = {
+            "id": self.last_notification_id,
+            "type": notification_type,
+            "content": content,
+            "channel": channel,
+            "timestamp": datetime.now().isoformat(),
+            "read": False
+        }
+        
+        if username not in self.notifications:
+            self.notifications[username] = []
+            
+        self.notifications[username].append(notification)
+        return notification
+
+    def _handle_get_notifications(self, request, client_info):
+        """Handle request to get user notifications"""
+        token = request.get("token")
+        since_id = request.get("since_id", 0)
+        
+        # Validate session
+        valid, msg, username = auth.validate_session(token)
+        if not valid:
+            return {"success": False, "type": MSG_ERROR, "message": msg}
+            
+        # Get unread notifications for user
+        notifications = []
+        if username in self.notifications:
+            notifications = [n for n in self.notifications[username] 
+                           if n["id"] > since_id and not n["read"]]
+        
+        return {
+            "success": True,
+            "type": MSG_SUCCESS,
+            "notifications": notifications
+        }
+
+    def _handle_mark_notifications_read(self, request, client_info):
+        """Handle request to mark notifications as read"""
+        token = request.get("token")
+        notification_ids = request.get("notification_ids", [])
+        
+        # Validate session
+        valid, msg, username = auth.validate_session(token)
+        if not valid:
+            return {"success": False, "type": MSG_ERROR, "message": msg}
+            
+        # Mark notifications as read
+        if username in self.notifications:
+            for notification in self.notifications[username]:
+                if notification["id"] in notification_ids:
+                    notification["read"] = True
+        
+        return {
+            "success": True,
+            "type": MSG_SUCCESS,
+            "message": "Notifications marked as read"
+        }
 
 def get_local_ip():
     """Get the local IP address"""
