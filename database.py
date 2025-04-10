@@ -107,7 +107,8 @@ class Database:
             "description": description,
             "created_at": datetime.now().isoformat(),
             "members": [owner],
-            "last_message_id": 0
+            "last_message_id": 0,
+            "visitor_allowed": True  # Default to True for backward compatibility
         }
         self._save_json(self.channels_file, channels)
         
@@ -160,10 +161,18 @@ class Database:
             }
         return None
     
-    def list_channels(self):
+    def list_channels(self, is_visitor=False):
         """List all available channels"""
         channels = self._load_json(self.channels_file)
-        return channels if channels else {}
+        if not channels:
+            return {}
+            
+        # If user is a visitor, only show channels that allow visitors
+        if is_visitor:
+            return {name: info for name, info in channels.items() 
+                   if info.get("visitor_allowed", True)}  # Default to True for backward compatibility
+        
+        return channels
     
     def get_user_channels(self, username):
         """Get channels a user has joined"""
@@ -358,6 +367,16 @@ class Database:
         """Get all active streams"""
         return self.streams
     '''
+
+    def set_visitor_permission(self, channel_name, allowed):
+        """Set whether visitors are allowed to view this channel"""
+        channels = self._load_json(self.channels_file)
+        if channel_name not in channels:
+            return False
+        
+        channels[channel_name]["visitor_allowed"] = allowed
+        self._save_json(self.channels_file, channels)
+        return True
 
 # Singleton instance
 db = Database()

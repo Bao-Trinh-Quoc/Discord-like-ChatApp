@@ -280,7 +280,7 @@ class ChatClient:
     
     def _list_channels(self):
         """List available channels"""
-        channels = db.list_channels()
+        channels = db.list_channels(is_visitor=self.is_visitor)
         if not channels:
             return {}  # Ensure an empty dictionary is returned if no channels are available
         return channels
@@ -734,6 +734,22 @@ class ChatClient:
             return None
             
         return channel
+
+    def set_channel_visitor_permission(self, channel_name, allowed):
+        """Set whether visitors are allowed to view a channel"""
+        # Check if user owns the channel
+        channel = db.get_channel(channel_name)
+        if not channel or channel["owner"] != self.username:
+            print("You must be the channel owner to change visitor permissions")
+            return False
+            
+        # Update permission
+        success = db.set_visitor_permission(channel_name, allowed)
+        if success:
+            print(f"Channel {channel_name} is now {'visible' if allowed else 'hidden'} to visitors")
+        else:
+            print(f"Failed to update visitor permissions for channel {channel_name}")
+        return success
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

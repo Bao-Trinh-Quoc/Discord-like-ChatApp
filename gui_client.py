@@ -356,6 +356,7 @@ class ChatGUI:
                                         borderwidth=0)
         self.channel_listbox.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         self.channel_listbox.bind('<Double-Button-1>', lambda e: self._join_selected_channel())
+        self.channel_listbox.bind('<Button-3>', self._show_channel_context_menu)  # Right-click for context menu
         
         # Online Users Section
         online_users_label = ttk.Label(left_frame, 
@@ -599,27 +600,55 @@ class ChatGUI:
     def _show_create_channel_dialog(self):
         dialog = tk.Toplevel(self.root)
         dialog.title("Create Channel")
-        dialog.geometry("300x200")
+        dialog.geometry("300x250")
+        dialog.configure(bg=self.colors['bg'])
         
-        ttk.Label(dialog, text="Channel Name:").pack(pady=5)
+        ttk.Label(dialog, text="Channel Name:", style='Discord.TLabel').pack(pady=5)
         name_entry = ttk.Entry(dialog)
         name_entry.pack(pady=5)
         
-        ttk.Label(dialog, text="Description:").pack(pady=5)
+        ttk.Label(dialog, text="Description:", style='Discord.TLabel').pack(pady=5)
         desc_entry = ttk.Entry(dialog)
         desc_entry.pack(pady=5)
+        
+        # Add visitor permission with color changing label
+        visitor_var = tk.BooleanVar(value=True)  # Default to True
+        visitor_label = tk.Label(
+            dialog,
+            text="Allow Visitors to View Channel",
+            bg=self.colors['bg'],
+            fg='white',  # Start with white (enabled)
+            font=('Helvetica', 10),
+            cursor='hand2'  # Show hand cursor to indicate clickable
+        )
+        visitor_label.pack(pady=15)
+        
+        def toggle_visitor(event=None):
+            visitor_var.set(not visitor_var.get())
+            visitor_label.config(fg='white' if visitor_var.get() else 'grey')
+        
+        visitor_label.bind('<Button-1>', toggle_visitor)
         
         def create():
             name = name_entry.get()
             desc = desc_entry.get()
             if self.chat_client._create_channel(name, desc):
+                # Set visitor permission
+                self.chat_client.set_channel_visitor_permission(name, visitor_var.get())
                 self._refresh_channels()
                 dialog.destroy()
             else:
                 messagebox.showerror("Error", "Failed to create channel")
         
-        ttk.Button(dialog, text="Create", command=create).pack(pady=20)
-    
+        create_btn = tk.Button(dialog,
+                             text="Create",
+                             command=create,
+                             bg=self.colors['accent'],
+                             fg=self.colors['text'],
+                             font=('Helvetica', 10),
+                             relief=tk.FLAT)
+        create_btn.pack(pady=20)
+
     def _join_selected_channel(self):
         """Join the selected channel"""
         selection = self.channel_listbox.curselection()
@@ -1162,7 +1191,7 @@ class ChatGUI:
         self.loop.create_task(update_stream_messages())
         
         # Handle window close event
-        viewer_window.protocol("WM_DELETE_WINDOW", lambda: self.loop.create_task(handle_close()))
+        viewer_window.protocol("WM_DELETE_WINDOW", on_closing)
         
         # Start connection using the existing event loop
         self.loop.create_task(connect_to_stream())
@@ -2048,6 +2077,99 @@ class ChatGUI:
             # Clean up asyncio loop
             self.loop.stop()
             self.loop.close()
+
+    def _show_channel_context_menu(self, event):
+        """Show context menu for channel"""
+        selection = self.channel_listbox.curselection()
+        if not selection:
+            return
+            
+        # Get channel name
+        channel_text = self.channel_listbox.get(selection[0])
+        channel_name = channel_text.split(" (")[0]
+        
+        # Create context menu
+        menu = tk.Menu(self.root, tearoff=0, bg=self.colors['light_bg'], fg=self.colors['text'])
+        
+        # Add menu items
+        menu.add_command(label="Join Channel", 
+                        command=lambda: self._join_selected_channel())
+        
+        # Add settings option if user is owner
+        channel = self.chat_client.get_channel(channel_name)
+        if channel and channel["owner"] == self.chat_client.username:
+            menu.add_separator()
+            menu.add_command(label="Channel Settings",
+                           command=lambda: self._show_channel_settings_dialog(channel_name))
+        
+        # Show menu at click position
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+
+    def _show_channel_settings_dialog(self, channel_name):
+        """Show dialog for channel settings"""
+        # Get channel info
+        channel = self.chat_client.get_channel(channel_name)
+        if not channel:
+            messagebox.showerror("Error", "Channel not found")
+            return
+            
+        # Check if user is owner
+        if channel["owner"] != self.chat_client.username:
+            messagebox.showwarning("Warning", "Only channel owner can modify settings")
+            return
+            
+        # Create settings dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f"Channel Settings - {channel_name}")
+        dialog.geometry("300x200")
+        dialog.configure(bg=self.colors['bg'])
+        
+        # Channel info
+        ttk.Label(dialog,
+                 text=f"Channel: {channel_name}",
+                 style='Discord.TLabel',
+                 font=('Helvetica', 12, 'bold')).pack(pady=10)
+        
+        # Get current visitor permission
+        channels = self.chat_client._list_channels()
+        current_permission = channels[channel_name].get("visitor_allowed", True)
+        
+        # Visitor permission with color changing label
+        visitor_var = tk.BooleanVar(value=current_permission)
+        visitor_label = tk.Label(
+            dialog,
+            text="Allow Visitors to View Channel",
+            bg=self.colors['bg'],
+            fg='white' if current_permission else 'grey',  # Initial color based on current state
+            font=('Helvetica', 10),
+            cursor='hand2'  # Show hand cursor to indicate clickable
+        )
+        visitor_label.pack(pady=15)
+        
+        def toggle_visitor(event=None):
+            visitor_var.set(not visitor_var.get())
+            visitor_label.config(fg='white' if visitor_var.get() else 'grey')
+        
+        visitor_label.bind('<Button-1>', toggle_visitor)
+        
+        def save_settings():
+            # Update visitor permission
+            self.chat_client.set_channel_visitor_permission(channel_name, visitor_var.get())
+            dialog.destroy()
+            self._refresh_channels()  # Refresh to update any changes
+        
+        # Save button
+        save_btn = tk.Button(dialog,
+                           text="Save Changes",
+                           command=save_settings,
+                           bg=self.colors['accent'],
+                           fg=self.colors['text'],
+                           font=('Helvetica', 10),
+                           relief=tk.FLAT)
+        save_btn.pack(pady=20)
 
 if __name__ == "__main__":
     gui = ChatGUI()
