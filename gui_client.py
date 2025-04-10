@@ -1059,7 +1059,7 @@ class ChatGUI:
                     
                     if state == "connected":
                         print("Connection established, waiting for video track...")
-                        status_label.config(text="Waiting for video...")
+                        # status_label.config(text="Waiting for video...")
                     elif state == "failed":
                         print("Connection failed, closing...")
                         await handle_close()
@@ -1191,7 +1191,7 @@ class ChatGUI:
         self.loop.create_task(update_stream_messages())
         
         # Handle window close event
-        viewer_window.protocol("WM_DELETE_WINDOW", on_closing)
+        viewer_window.protocol("WM_DELETE_WINDOW", lambda: self.loop.create_task(handle_close()))
         
         # Start connection using the existing event loop
         self.loop.create_task(connect_to_stream())

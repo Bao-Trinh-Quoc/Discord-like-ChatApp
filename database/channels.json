@@ -10,7 +10,8 @@
       "visitor:g",
       "hacker"
     ],
-    "last_message_id": 51
+    "last_message_id": 51,
+    "visitor_allowed": false
   },
   "newbao": {
     "owner": "bao",
