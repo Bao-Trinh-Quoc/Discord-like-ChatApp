@@ -3,15 +3,17 @@
     "password_hash": "123",
     "email": "",
     "created_at": "2025-03-21T16:19:29.607232",
-    "status": "offline",
+    "status": "online",
     "channels_owned": [
       "baosd",
-      "newbao"
+      "newbao",
+      "test1"
     ],
     "channels_joined": [
       "baosd",
       "newbao",
-      "aob cool chat"
+      "aob cool chat",
+      "test1"
     ]
   },
   "aob": {
@@ -39,5 +41,13 @@
       "newbao",
       "aob cool chat"
     ]
+  },
+  "test1": {
+    "password_hash": "123",
+    "email": "",
+    "created_at": "2025-04-23T05:47:09.387778",
+    "status": "offline",
+    "channels_owned": [],
+    "channels_joined": []
   }
 }

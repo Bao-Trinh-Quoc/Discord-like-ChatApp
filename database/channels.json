@@ -10,7 +10,7 @@
       "visitor:g",
       "hacker"
     ],
-    "last_message_id": 51,
+    "last_message_id": 57,
     "visitor_allowed": false
   },
   "newbao": {
@@ -24,7 +24,8 @@
       "aob",
       "hacker"
     ],
-    "last_message_id": 1
+    "last_message_id": 1,
+    "visitor_allowed": true
   },
   "aob cool chat": {
     "owner": "aob",
@@ -34,8 +35,21 @@
       "aob",
       "bao",
       "visitor:ds",
-      "hacker"
+      "hacker",
+      "visitor:g"
     ],
-    "last_message_id": 2
+    "last_message_id": 2,
+    "visitor_allowed": true
+  },
+  "test1": {
+    "owner": "bao",
+    "description": "abcdxyz",
+    "created_at": "2025-04-23T06:09:03.597602",
+    "members": [
+      "bao",
+      "visitor:g"
+    ],
+    "last_message_id": 0,
+    "visitor_allowed": true
   }
 }

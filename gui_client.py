@@ -134,15 +134,33 @@ class ChatGUI:
         center_frame = ttk.Frame(login_frame, style='Main.TFrame')
         center_frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
         
+        # Add logo above title
+        try:
+            logo_image = Image.open("HCMUT_official_logo.png")  # Path to your logo file
+            logo_image = logo_image.resize((200, 200), Image.LANCZOS)  # Resize as needed
+            logo_photo = ImageTk.PhotoImage(logo_image)
+            
+            logo_label = tk.Label(center_frame, image=logo_photo, bg=self.colors['bg'])
+            logo_label.image = logo_photo  # Keep a reference to prevent garbage collection
+            logo_label.pack(pady=10)
+        except Exception as e:
+            print(f"Could not load logo: {e}")
+            # Create a text-based logo as fallback
+            text_logo = ttk.Label(center_frame, 
+                                text="TCParty", 
+                                style='Discord.TLabel',
+                                font=('Helvetica', 36, 'bold'))
+            text_logo.pack(pady=10)
+
         # Title
         title_label = ttk.Label(center_frame, 
-                              text="Welcome back!",
+                              text="Connected to TCParty",
                               style='Discord.TLabel',
                               font=('Helvetica', 24, 'bold'))
         title_label.pack(pady=20)
         
         subtitle_label = ttk.Label(center_frame,
-                                 text="We're so excited to see you again!",
+                                 text="Keep calm and ACK on.",
                                  style='Discord.TLabel',
                                  font=('Helvetica', 14))
         subtitle_label.pack(pady=(0, 20))
