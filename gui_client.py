@@ -160,7 +160,7 @@ class ChatGUI:
         title_label.pack(pady=20)
         
         subtitle_label = ttk.Label(center_frame,
-                                 text="Keep calm and ACK on.",
+                                 text="Keep calm and ACK on!",
                                  style='Discord.TLabel',
                                  font=('Helvetica', 14))
         subtitle_label.pack(pady=(0, 20))
