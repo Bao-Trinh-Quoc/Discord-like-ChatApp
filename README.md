@@ -1,39 +1,46 @@
-# DISCORD-LIKE CHATAPP
+# Discord-Like ChatApp
 
-## HOW TO RUN (IN LINUX-BASED SYSTEM)
-start the server by running the following command in the terminal
+## How to Run (Linux-Based Systems)
 
-```
+### Start the Server
+Run the following command in the terminal to start the server:
+
+```bash
 ./start_server
 ```
 
-if cannot run the server, try to give the permission to the file
-```
+If the server does not start, grant execution permissions to the file:
+
+```bash
 chmod +x start_server
 ```
 
-then start the client by running the following command in the terminal
+### Start the Client
+Run the client using the following command:
 
+```bash
+python3 gui_client.py
 ```
-python3 client.py
-```
 
-Enter the username and password (or create new account) in users.json
+### Login or Create an Account
+Enter your username and password (or create a new account) in the `users.json` file. Example accounts:
 
-account: bao password: 123
-account: aob password: 321
-account: hacker password: 456
+- Username: `bao`, Password: `123`
+- Username: `aob`, Password: `321`
+- Username: `hacker`, Password: `456`
 
-featuress right now:
-- authentication
-- user's status
-- channel hosting
-- list of online users
-- see messages in a channel
-- send messages in a channel
-- ...
+## Features
+### Currently Available:
+- User authentication
+- User status updates
+- Channel hosting
+- Online users list
+- View messages in a channel
+- Send messages in a channel
+- Livestreaming
+- User fetch
 
-important features need to be implemented:
-- livestreaming <--- MOST IMPORTANT < IMPLEMENTED BUT STILL CAN BE BUG>
-- user fetch < ---- IMPORTANT ---- >
-- multimedia sharing <--- COULD BE LATER
+### Communication between 2 computers:
+- Use the same IP address for both computers.
+- setup the server on one computer and the client on another.
+
